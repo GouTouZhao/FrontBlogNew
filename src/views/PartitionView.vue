@@ -1,0 +1,262 @@
+<script setup>
+import { computed, watch, onMounted, nextTick, onUnmounted } from 'vue';
+import { useRoute } from 'vue-router';
+import { partitions } from '../data/mock';
+import { 
+  currentPartition, 
+  currentPage, 
+  paginatedList, 
+  hasPrevPage, 
+  hasNextPage, 
+  isEmpty, 
+  totalPages, 
+  prevPage as storePrevPage, 
+  nextPage as storeNextPage 
+} from '../store';
+
+const route = useRoute();
+
+const currentPartitionObj = computed(() => {
+  return partitions.find(p => p.id === currentPartition.value);
+});
+
+const prevPage = async () => {
+  if (hasPrevPage.value) {
+    storePrevPage();
+    await nextTick();
+    initObserver();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+};
+
+const nextPage = async () => {
+  if (hasNextPage.value) {
+    storeNextPage();
+    await nextTick();
+    initObserver();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+};
+
+let observer;
+const initObserver = () => {
+  if (observer) observer.disconnect();
+  observer = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+      }
+    });
+  }, {
+    threshold: 0.1,
+    rootMargin: "0px 0px -50px 0px"
+  });
+
+  const elements = document.querySelectorAll('.reveal, .list-reveal');
+  elements.forEach((el) => observer.observe(el));
+};
+
+watch(() => route.params.partition, async (newPartition) => {
+  currentPartition.value = newPartition;
+  currentPage.value = 1;
+  await nextTick();
+  initObserver();
+}, { immediate: true });
+
+onMounted(() => {
+  initObserver();
+});
+
+onUnmounted(() => {
+  if (observer) observer.disconnect();
+});
+</script>
+
+<template>
+  <div class="partition-view" v-if="currentPartitionObj">
+    <div class="partition-header reveal delay-100">
+      <h1 class="partition-title">{{ currentPartitionObj.name }}</h1>
+      <p class="partition-desc subtitle">{{ currentPartitionObj.desc }}</p>
+    </div>
+
+    <div class="blog-list-container">
+      <div v-if="isEmpty" class="empty-state list-reveal">
+        还没有发布任何博客
+      </div>
+      
+      <div v-else class="post-list">
+        <article 
+          v-for="(item, index) in paginatedList" 
+          :key="item.id" 
+          class="post-item list-reveal"
+          :style="{ transitionDelay: `${index * 80}ms` }"
+        >
+          <div class="post-meta">{{ currentPartitionObj.name }} • {{ item.date }}</div>
+          <h3 class="post-title">{{ item.title }}</h3>
+          <p class="post-excerpt">{{ item.excerpt }}</p>
+        </article>
+      </div>
+
+      <div class="pagination-footer list-reveal" :style="{ transitionDelay: isEmpty ? '0ms' : `${paginatedList.length * 80}ms` }">
+        <div class="pagination-controls" v-if="!isEmpty || currentPage > 1">
+          <span class="page-btn" :class="{ disabled: !hasPrevPage }" @click="prevPage">上一页</span>
+          <span class="page-current">第 {{ currentPage }} 页</span>
+          <span class="page-btn" :class="{ disabled: !hasNextPage }" @click="nextPage">下一页</span>
+        </div>
+        
+        <div class="bottom-line" v-if="currentPage === totalPages && !isEmpty">
+          我也是有底线的
+        </div>
+      </div>
+    </div>
+  </div>
+  <div v-else class="partition-view">
+    <div class="empty-state">分区不存在</div>
+  </div>
+</template>
+
+<style scoped>
+.partition-view {
+  max-width: 800px;
+  padding-top: 40px;
+  padding-bottom: 80px;
+}
+
+.partition-header {
+  margin-bottom: 60px;
+}
+
+.partition-title {
+  font-size: 4rem;
+  font-weight: 800;
+  letter-spacing: -1.5px;
+  margin-bottom: 16px;
+}
+
+.subtitle {
+  font-size: 1.5rem;
+  opacity: 0.7;
+  font-weight: 400;
+}
+
+.blog-list-container {
+  min-height: 50vh;
+}
+
+.empty-state {
+  font-size: 1.25rem;
+  opacity: 0.5;
+  text-align: center;
+  padding: 80px 0;
+  font-weight: 500;
+}
+
+.post-list {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.post-item {
+  padding-bottom: 40px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.post-item:last-child {
+  border-bottom: none;
+}
+
+.post-meta {
+  font-size: 0.875rem;
+  opacity: 0.6;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.post-title {
+  font-size: 1.75rem;
+  font-weight: 700;
+  margin-bottom: 12px;
+  letter-spacing: -0.5px;
+  cursor: pointer;
+}
+
+.post-title:hover {
+  text-decoration: underline;
+}
+
+.post-excerpt {
+  font-size: 1.125rem;
+  opacity: 0.8;
+  line-height: 1.5;
+}
+
+.pagination-footer {
+  margin-top: 60px;
+  padding-top: 40px;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+}
+
+.page-btn {
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.page-btn:hover:not(.disabled) {
+  opacity: 1;
+}
+
+.page-btn.disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+}
+
+.page-current {
+  font-size: 0.875rem;
+  opacity: 0.6;
+  font-weight: 500;
+}
+
+.bottom-line {
+  font-size: 0.875rem;
+  opacity: 0.4;
+  margin-top: 10px;
+  font-style: italic;
+}
+
+/* List Reveal Animation */
+.list-reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  filter: blur(4px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out, filter 0.6s ease-out;
+}
+
+.list-reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+
+@media (max-width: 768px) {
+  .partition-title {
+    font-size: 3rem;
+  }
+}
+</style>
