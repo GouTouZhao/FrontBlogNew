@@ -13,11 +13,55 @@ import {
   nextPage as storeNextPage
 } from './store';
 
+import ToastManager from './components/ToastManager.vue';
+import LoginModal from './components/LoginModal.vue';
+import { showToast } from './utils/toast';
+
 const router = useRouter();
 const route = useRoute();
 
 const isDark = ref(false);
 const isSidebarExpanded = ref(false);
+const showLoginModal = ref(false);
+
+const currentUser = ref({
+  isLoggedIn: false,
+  nickname: '游客'
+});
+
+const checkAuth = () => {
+  const token = localStorage.getItem('access_token');
+  const nickname = localStorage.getItem('user_nickname');
+  if (token) {
+    currentUser.value.isLoggedIn = true;
+    currentUser.value.nickname = nickname || '用户';
+  } else {
+    currentUser.value.isLoggedIn = false;
+    currentUser.value.nickname = '游客';
+  }
+};
+
+onMounted(() => {
+  checkAuth();
+  window.addEventListener('auth-expired', handleAuthExpired);
+});
+
+import { onUnmounted } from 'vue';
+onUnmounted(() => {
+  window.removeEventListener('auth-expired', handleAuthExpired);
+});
+
+const handleAuthExpired = () => {
+  showToast('登录信息已过期，请重新登录', 'error');
+  checkAuth();
+  showLoginModal.value = true;
+};
+
+// We can listen to route changes to update auth status in case they just logged in
+import { watch } from 'vue';
+watch(() => route.path, () => {
+  checkAuth();
+});
 
 const toggleTheme = () => {
   isDark.value = !isDark.value;
@@ -57,10 +101,32 @@ const nextPage = async () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 };
+
+const handleAuthAction = () => {
+  if (currentUser.value.isLoggedIn) {
+    // Logout
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user_email');
+    localStorage.removeItem('user_nickname');
+    localStorage.removeItem('user_id');
+    checkAuth();
+    showToast('已退出登录', 'info');
+    if (route.path === '/profile') {
+      router.push('/');
+    }
+  } else {
+    // Login
+    showLoginModal.value = true;
+  }
+};
 </script>
 
 <template>
   <div class="app-container">
+    <ToastManager />
+    <LoginModal :isVisible="showLoginModal" @close="showLoginModal = false" @loginSuccess="checkAuth" />
+    
     <aside class="sidebar" :class="{ 'expanded': isSidebarExpanded, 'collapsed': !isSidebarExpanded }">
       <div class="sidebar-top">
         <button class="nav-toggle" @click="toggleSidebar">
@@ -71,7 +137,7 @@ const nextPage = async () => {
         </button>
 
         <div v-if="isSidebarExpanded" class="profile-link" @click="goToProfile">
-          <img src="./assets/GouTou.jpg" alt="GouTou" class="avatar-small" />
+          <img src="./assets/GouTou.jpg" alt="Avatar" class="avatar-small" />
           <span class="profile-name">GouTou</span>
         </div>
       </div>
@@ -108,10 +174,24 @@ const nextPage = async () => {
 
       <div v-if="isSidebarExpanded" class="sidebar-bottom">
         <div class="user-info">
-          <div class="avatar-text">用</div>
+          <div 
+            class="avatar-text" 
+            @click="!currentUser.isLoggedIn && handleAuthAction()"
+            :style="{ cursor: currentUser.isLoggedIn ? 'default' : 'pointer' }"
+          >
+            {{ currentUser.nickname.charAt(0).toUpperCase() }}
+          </div>
           <div class="user-details">
-            <span class="user-name">游客</span>
-            <span class="user-action">登录 / 注册</span>
+            <span 
+              class="user-name" 
+              @click="!currentUser.isLoggedIn && handleAuthAction()"
+              :style="{ cursor: currentUser.isLoggedIn ? 'default' : 'pointer' }"
+            >
+              {{ currentUser.nickname }}
+            </span>
+            <span class="user-action" @click="handleAuthAction">
+              {{ currentUser.isLoggedIn ? '退出' : '登录 / 注册' }}
+            </span>
           </div>
         </div>
       </div>

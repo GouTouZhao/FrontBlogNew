@@ -9,7 +9,8 @@ import {
   hasPrevPage, 
   hasNextPage, 
   isEmpty, 
-  totalPages, 
+  totalPages,
+  isLoading,
   prevPage as storePrevPage, 
   nextPage as storeNextPage 
 } from '../store';
@@ -85,13 +86,17 @@ onUnmounted(() => {
       </div>
       
       <div v-else class="post-list">
+        <div v-if="isLoading" class="loading-state list-reveal">
+          加载中...
+        </div>
         <article 
+          v-else
           v-for="(item, index) in paginatedList" 
           :key="item.id" 
           class="post-item list-reveal"
           :style="{ transitionDelay: `${index * 80}ms` }"
         >
-          <div class="post-meta">{{ currentPartitionObj.name }} • {{ item.date }}</div>
+          <div class="post-meta">{{ currentPartitionObj.name }} • {{ item.date }} • {{ item.viewCount }} 次浏览</div>
           <h3 class="post-title">{{ item.title }}</h3>
           <p class="post-excerpt">{{ item.excerpt }}</p>
         </article>
@@ -149,6 +154,21 @@ onUnmounted(() => {
   text-align: center;
   padding: 80px 0;
   font-weight: 500;
+}
+
+.loading-state {
+  font-size: 1.25rem;
+  opacity: 0.5;
+  text-align: center;
+  padding: 40px 0;
+  font-weight: 500;
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+  100% { opacity: 0.3; }
 }
 
 .post-list {

@@ -1,28 +1,76 @@
-import { ref, computed } from 'vue';
-import { mockBlogData } from '../data/mock';
+import { ref, computed, watch } from 'vue';
+import api from '../api';
+import { showToast } from '../utils/toast';
 
 export const currentPartition = ref(null);
 export const currentPage = ref(1);
 export const itemsPerPage = 8;
 
-export const currentList = computed(() => {
-  if (!currentPartition.value) return [];
-  return mockBlogData[currentPartition.value] || [];
-});
+export const paginatedList = ref([]);
+export const totalCount = ref(0);
+export const isLoading = ref(false);
 
 export const totalPages = computed(() => {
-  return Math.ceil(currentList.value.length / itemsPerPage) || 1;
-});
-
-export const paginatedList = computed(() => {
-  const start = (currentPage.value - 1) * itemsPerPage;
-  const end = start + itemsPerPage;
-  return currentList.value.slice(start, end);
+  return Math.max(1, Math.ceil(totalCount.value / itemsPerPage));
 });
 
 export const hasPrevPage = computed(() => currentPage.value > 1);
 export const hasNextPage = computed(() => currentPage.value < totalPages.value);
-export const isEmpty = computed(() => currentList.value.length === 0);
+export const isEmpty = computed(() => paginatedList.value.length === 0);
+
+export const fetchArticles = async () => {
+  if (!currentPartition.value) return;
+  
+  isLoading.value = true;
+  try {
+    const res = await api.post('/static/get_article_list', {
+      categoryId: currentPartition.value,
+      page: currentPage.value,
+      pageSize: itemsPerPage
+    });
+    
+    let data = res.data;
+    if (res.data.errCode === 0 && res.data.data) {
+      data = res.data.data;
+    }
+    
+    const list = data.list || [];
+    // Map backend fields to frontend expected fields
+    paginatedList.value = list.map(item => {
+      // updatedAt might be a unix timestamp
+      let dateStr = '';
+      if (item.updatedAt) {
+        const d = new Date(item.updatedAt * 1000);
+        dateStr = `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
+      } else {
+        dateStr = '未知时间';
+      }
+
+      return {
+        id: item.articleId || item.id,
+        title: item.title,
+        excerpt: item.excerpt || '暂无简介',
+        date: dateStr,
+        viewCount: item.viewCount || 0,
+        likeCount: item.likeCount || 0
+      };
+    });
+    
+    totalCount.value = data.totalCount || 0;
+  } catch (error) {
+    console.error('Failed to fetch articles:', error);
+    showToast('获取文章列表失败', 'error');
+    paginatedList.value = [];
+    totalCount.value = 0;
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+// When partition or page changes, fetch new data.
+watch([currentPartition, currentPage], () => {
+  fetchArticles();
+});
 
 export const prevPage = () => {
   if (hasPrevPage.value) {
