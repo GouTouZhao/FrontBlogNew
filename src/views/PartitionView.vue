@@ -21,6 +21,10 @@ const currentPartitionObj = computed(() => {
   return partitions.find(p => p.id === currentPartition.value);
 });
 
+const isAdmin = computed(() => {
+  return localStorage.getItem('user_email') === '2460607806@qq.com';
+});
+
 const prevPage = async () => {
   if (hasPrevPage.value) {
     storePrevPage();
@@ -64,6 +68,13 @@ watch(() => route.params.partition, async (newPartition) => {
   initObserver();
 }, { immediate: true });
 
+watch(isLoading, async (newVal) => {
+  if (!newVal) {
+    await nextTick();
+    initObserver();
+  }
+});
+
 onMounted(() => {
   initObserver();
 });
@@ -75,26 +86,30 @@ onUnmounted(() => {
 
 <template>
   <div class="partition-view" v-if="currentPartitionObj">
-    <div class="partition-header reveal delay-100">
+    <div class="partition-header reveal delay-100" :key="'header-' + currentPartition">
       <h1 class="partition-title">{{ currentPartitionObj.name }}</h1>
-      <p class="partition-desc subtitle">{{ currentPartitionObj.desc }}</p>
+      <div class="title-action-row">
+        <p class="partition-desc subtitle">{{ currentPartitionObj.desc }}</p>
+        <button v-if="isAdmin" class="post-btn" @click="$router.push(`/post?partition=${currentPartition}`)">发帖</button>
+      </div>
     </div>
 
     <div class="blog-list-container">
-      <div v-if="isEmpty" class="empty-state list-reveal">
+      <div v-if="isLoading" class="loading-state list-reveal" :key="'loading-' + currentPartition">
+        加载中...
+      </div>
+      
+      <div v-else-if="isEmpty" class="empty-state list-reveal" :key="'empty-' + currentPartition">
         还没有发布任何博客
       </div>
       
       <div v-else class="post-list">
-        <div v-if="isLoading" class="loading-state list-reveal">
-          加载中...
-        </div>
         <article 
-          v-else
           v-for="(item, index) in paginatedList" 
           :key="item.id" 
           class="post-item list-reveal"
           :style="{ transitionDelay: `${index * 80}ms` }"
+          @click="$router.push(`/article/${item.id}`)"
         >
           <div class="post-meta">{{ currentPartitionObj.name }} • {{ item.date }} • {{ item.viewCount }} 次浏览</div>
           <h3 class="post-title">{{ item.title }}</h3>
@@ -102,7 +117,7 @@ onUnmounted(() => {
         </article>
       </div>
 
-      <div class="pagination-footer list-reveal" :style="{ transitionDelay: isEmpty ? '0ms' : `${paginatedList.length * 80}ms` }">
+      <div class="pagination-footer list-reveal" :key="'footer-' + currentPartition" :style="{ transitionDelay: isEmpty ? '0ms' : `${paginatedList.length * 80}ms` }">
         <div class="pagination-controls" v-if="!isEmpty || currentPage > 1">
           <span class="page-btn" :class="{ disabled: !hasPrevPage }" @click="prevPage">上一页</span>
           <span class="page-current">第 {{ currentPage }} 页</span>
@@ -129,6 +144,30 @@ onUnmounted(() => {
 
 .partition-header {
   margin-bottom: 60px;
+}
+
+.title-action-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.post-btn {
+  background: var(--text-color);
+  color: var(--bg-color);
+  border: none;
+  padding: 10px 24px;
+  border-radius: 9999px;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: transform 0.2s, opacity 0.2s;
+  box-shadow: 0 4px 12px var(--glass-shadow);
+}
+
+.post-btn:hover {
+  transform: translateY(-2px);
+  opacity: 0.9;
 }
 
 .partition-title {

@@ -24,9 +24,9 @@ export const fetchArticles = async () => {
   isLoading.value = true;
   try {
     const res = await api.post('/static/get_article_list', {
-      categoryId: currentPartition.value,
+      category_id: currentPartition.value,
       page: currentPage.value,
-      pageSize: itemsPerPage
+      page_size: itemsPerPage
     });
     
     let data = res.data;
@@ -39,24 +39,24 @@ export const fetchArticles = async () => {
     paginatedList.value = list.map(item => {
       // updatedAt might be a unix timestamp
       let dateStr = '';
-      if (item.updatedAt) {
-        const d = new Date(item.updatedAt * 1000);
+      if (item.updated_at) {
+        const d = new Date(item.updated_at * 1000);
         dateStr = `${d.getFullYear()}-${(d.getMonth()+1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
       } else {
         dateStr = '未知时间';
       }
 
       return {
-        id: item.articleId || item.id,
+        id: item.article_id || item.id,
         title: item.title,
-        excerpt: item.excerpt || '暂无简介',
+        excerpt: item.content ? item.content.substring(0, 100) : '暂无简介',
         date: dateStr,
-        viewCount: item.viewCount || 0,
-        likeCount: item.likeCount || 0
+        viewCount: item.view_count || 0,
+        likeCount: item.like_count || 0
       };
     });
     
-    totalCount.value = data.totalCount || 0;
+    totalCount.value = data.total_count || 0;
   } catch (error) {
     console.error('Failed to fetch articles:', error);
     showToast('获取文章列表失败', 'error');

@@ -84,6 +84,10 @@ const goHome = () => {
   router.push('/');
 };
 
+const goToPost = () => {
+  router.push('/post');
+};
+
 const goToProfile = () => {
   router.push('/profile');
 };
@@ -153,6 +157,10 @@ const handleAuthAction = () => {
         </ul>
 
         <div v-if="currentPartition" class="sidebar-list">
+          <button v-if="currentPartition === 'forum'" class="publish-post-btn" @click="goToPost">
+            发布帖子
+          </button>
+
           <div class="sidebar-divider"></div>
           
           <div class="sidebar-pagination-btn" v-if="hasPrevPage" @click="prevPage">
@@ -161,7 +169,7 @@ const handleAuthAction = () => {
 
           <ul class="sidebar-blog-links">
             <li v-if="isEmpty" class="sidebar-empty">无内容</li>
-            <li v-for="item in paginatedList" :key="item.id" class="sidebar-blog-item">
+            <li v-for="item in paginatedList" :key="item.id" class="sidebar-blog-item" @click="router.push(`/article/${item.id}`)">
               {{ item.title }}
             </li>
           </ul>
@@ -300,6 +308,22 @@ const handleAuthAction = () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.publish-post-btn {
+  background-color: var(--text-color);
+  color: var(--bg-color);
+  border: none;
+  padding: 10px;
+  border-radius: 8px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: opacity 0.2s;
+}
+
+.publish-post-btn:hover {
+  opacity: 0.9;
 }
 
 .sidebar-divider {

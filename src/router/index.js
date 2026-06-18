@@ -20,6 +20,16 @@ const router = createRouter({
       path: '/:partition',
       name: 'partition',
       component: PartitionView
+    },
+    {
+      path: '/post',
+      name: 'post',
+      component: () => import('../views/PostView.vue')
+    },
+    {
+      path: '/article/:id',
+      name: 'article',
+      component: () => import('../views/ArticleView.vue')
     }
   ],
   scrollBehavior(to, from, savedPosition) {
