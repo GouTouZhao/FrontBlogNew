@@ -132,3 +132,9 @@ a {
 :root.dark .card:hover {
   box-shadow: 0 12px 40px rgba(255, 255, 255, 0.1);
 }
+
+@media (max-width: 768px) {
+  .sidebar.expanded ~ .main-content {
+    margin-left: 60px;
+  }
+}

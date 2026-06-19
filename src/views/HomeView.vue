@@ -1,9 +1,57 @@
 <script setup>
-import { onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import { partitions } from '../data/mock';
 import { useRouter } from 'vue-router';
+import api from '../api';
+import { showToast } from '../utils/toast';
 
 const router = useRouter();
+const recentBlogs = ref([]);
+
+// Cover image URL cache
+const coverImageUrls = ref({});
+
+const loadCoverImage = async (blog) => {
+  if (!blog.cover_image || coverImageUrls.value[blog.article_id]) return;
+  try {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      const userId = localStorage.getItem('user_id') || '0';
+      const email = localStorage.getItem('user_email') || '';
+      const payloadStr = `{"base":{"access_token":${JSON.stringify(token)},"user_id":${userId},"email":${JSON.stringify(email)}},"image_key":${JSON.stringify(blog.cover_image)}}`;
+      const res = await api.post('/bmanager/get_image_url', payloadStr, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (res.data && res.data.data && res.data.data.url) {
+        coverImageUrls.value[blog.article_id] = res.data.data.url;
+      }
+    } else {
+      coverImageUrls.value[blog.article_id] = `${api.defaults.baseURL}/image/get_image?key=${encodeURIComponent(blog.cover_image)}`;
+    }
+  } catch (e) {
+    console.error('Failed to load cover image:', e);
+  }
+};
+
+const fetchRecentBlogs = async () => {
+  try {
+    const res = await api.post('/static/get_last_blog_list', {});
+    const data = res.data.data || res.data;
+    if (data.list) {
+      recentBlogs.value = data.list;
+      // Load cover images
+      for (const blog of data.list) {
+        if (blog.cover_image) {
+          loadCoverImage(blog);
+        }
+      }
+      await nextTick();
+      initObserver();
+    }
+  } catch (e) {
+    console.error('Failed to fetch recent blogs:', e);
+  }
+};
 
 const goToPartition = (id) => {
   router.push(`/${id}`);
@@ -28,6 +76,7 @@ const initObserver = () => {
 };
 
 onMounted(() => {
+  fetchRecentBlogs();
   initObserver();
 });
 
@@ -38,139 +87,428 @@ onUnmounted(() => {
 
 <template>
   <div class="home-view">
+    <!-- Hero Section -->
     <section class="hero">
-      <h1 class="reveal delay-100">极简主义是极致的复杂。</h1>
-      <p class="reveal delay-200 subtitle">透过现代化的视角，探索摄影、技术与生活。</p>
+      <div class="hero-content">
+        <h1 class="reveal delay-100">
+          <span class="greeting">Hi, 我是</span>
+          <br/>
+          <span class="name-highlight">GouTou</span>
+        </h1>
+        <p class="reveal delay-200 subtitle">SYSUer / 创作者 / 探索者</p>
+        <p class="reveal delay-300 description">
+          欢迎来到我的数字花园。在这里，我记录生活点滴、分享创意，以及对这个世界的独特见解。
+          希望能与你一起，在探索未知中发现美好。
+        </p>
+      </div>
+      <div class="hero-visual reveal delay-400">
+        <div class="glass-shape shape-1"></div>
+        <div class="glass-shape shape-2"></div>
+      </div>
     </section>
 
+    <!-- Partitions Section with Inverted Cards -->
     <section class="categories" id="categories">
-      <h2 class="reveal delay-100 section-title">分区</h2>
+      <h2 class="reveal delay-100 section-title">探索板块</h2>
       <div class="grid">
-        <div class="card reveal" :class="'delay-' + ((index % 3 + 1) * 100)" v-for="(p, index) in partitions" :key="p.id" @click="goToPartition(p.id)">
-          <h3>{{ p.name }}</h3>
-          <p>{{ p.desc }}</p>
+        <div 
+          class="card reveal inverted-card" 
+          :class="'delay-' + ((index % 3 + 1) * 100)" 
+          v-for="(p, index) in partitions" 
+          :key="p.id" 
+          @click="goToPartition(p.id)"
+        >
+          <div class="card-content">
+            <h3>{{ p.name }}</h3>
+            <p>{{ p.desc }}</p>
+          </div>
+          <div class="card-arrow">→</div>
         </div>
       </div>
     </section>
 
-    <section class="recent-posts reveal delay-200">
-      <h2 class="section-title">最新动态</h2>
-      <div class="post-list">
-        <article class="post-item" v-for="i in 3" :key="i">
-          <div class="post-meta">全站速递 • 刚才</div>
-          <h3 class="post-title">欢迎来到全新的简约空间</h3>
-          <p class="post-excerpt">摒弃繁杂，带来更好的用户体验。极简是追求内心的平静与专注...</p>
-        </article>
+    <!-- Recent Dynamic Section -->
+    <section class="recent-thoughts reveal delay-200">
+      <h2 class="section-title">最新内容</h2>
+      <div class="thought-list">
+        <div 
+          v-for="blog in recentBlogs" 
+          :key="blog.article_id" 
+          class="thought-item acrylic-panel" 
+          :class="{ 'has-cover': blog.cover_image && coverImageUrls[blog.article_id] }"
+          @click="router.push(`/article/${blog.article_id}`)"
+        >
+          <!-- Cover Image Background -->
+          <div v-if="blog.cover_image && coverImageUrls[blog.article_id]" class="thought-cover-bg">
+            <img :src="coverImageUrls[blog.article_id]" alt="" />
+            <div class="thought-cover-fade"></div>
+          </div>
+          
+          <div class="thought-inner">
+            <div class="thought-meta">{{ new Date(blog.updated_at * 1000).toLocaleDateString() }} • 浏览: {{ blog.view_count }}</div>
+            <p class="thought-text">{{ blog.title }}</p>
+          </div>
+        </div>
+        <div v-if="recentBlogs.length === 0" class="thought-item acrylic-panel">
+          <div class="thought-inner">
+            <div class="thought-meta">寄语</div>
+            <p class="thought-text">"极简不仅仅是黑白与空无，而是把最重要的东西，用最清晰的方式表达出来。"</p>
+          </div>
+        </div>
       </div>
     </section>
   </div>
 </template>
 
 <style scoped>
+.home-view {
+  padding-bottom: 100px;
+}
+
+/* Reveal Animations (Linear.app style) */
+.reveal {
+  opacity: 0;
+  transform: translateY(40px);
+  filter: blur(10px);
+  transition: opacity 0.8s cubic-bezier(0.2, 0.8, 0.2, 1), 
+              transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1),
+              filter 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+  filter: blur(0);
+}
+
+.delay-100 { transition-delay: 100ms; }
+.delay-200 { transition-delay: 200ms; }
+.delay-300 { transition-delay: 300ms; }
+.delay-400 { transition-delay: 400ms; }
+
+/* Hero Section */
 .hero {
-  min-height: 60vh;
+  min-height: 70vh;
   display: flex;
-  flex-direction: column;
-  justify-content: center;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 80px;
-  max-width: 800px;
+  position: relative;
+}
+
+.hero-content {
+  max-width: 600px;
+  z-index: 2;
 }
 
 .hero h1 {
-  font-size: 5rem;
+  font-size: 5.5rem;
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: -2px;
   margin-bottom: 24px;
 }
 
-.subtitle {
-  font-size: 1.5rem;
-  opacity: 0.7;
-  font-weight: 400;
+.greeting {
+  font-size: 3rem;
+  opacity: 0.8;
+  font-weight: 600;
+  letter-spacing: -1px;
 }
 
-.section-title {
-  font-size: 2rem;
+.name-highlight {
+  color: var(--text-color);
+}
+
+.subtitle {
+  font-size: 1.5rem;
   font-weight: 700;
+  opacity: 0.9;
+  margin-bottom: 24px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.description {
+  font-size: 1.125rem;
+  line-height: 1.8;
+  opacity: 0.7;
+  max-width: 500px;
+}
+
+/* Decorative Glass Shapes */
+.hero-visual {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 400px;
+  height: 400px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.glass-shape {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--text-color);
+  opacity: 0.05;
+  filter: blur(40px);
+}
+
+.shape-1 {
+  width: 300px;
+  height: 300px;
+  top: 0;
+  right: 50px;
+  animation: float 10s ease-in-out infinite;
+}
+
+.shape-2 {
+  width: 200px;
+  height: 200px;
+  bottom: 0;
+  right: 150px;
+  animation: float 8s ease-in-out infinite reverse;
+}
+
+@keyframes float {
+  0% { transform: translate(0, 0); }
+  50% { transform: translate(-20px, 20px); }
+  100% { transform: translate(0, 0); }
+}
+
+/* Section Title */
+.section-title {
+  font-size: 2.5rem;
+  font-weight: 800;
   margin-bottom: 40px;
   letter-spacing: -1px;
 }
 
+/* Categories & Inverted Cards */
 .categories {
   margin-bottom: 120px;
 }
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 32px;
 }
 
-.card {
+.inverted-card {
   cursor: pointer;
+  background: var(--text-color);
+  color: var(--bg-color);
+  border-radius: 24px;
+  padding: 40px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  transition: transform 0.4s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.4s ease;
+  position: relative;
+  overflow: hidden;
 }
 
-.card h3 {
-  font-size: 1.5rem;
-  margin-bottom: 12px;
+/* Light mode shadow for black card */
+.inverted-card {
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+}
+
+.inverted-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.2);
+}
+
+/* Dark Mode Inverted Card: White card on dark bg */
+:global(.dark) .inverted-card {
+  background: #ffffff;
+  color: #000000;
+  box-shadow: 0 20px 40px rgba(255, 255, 255, 0.05);
+}
+
+:global(.dark) .inverted-card:hover {
+  box-shadow: 0 30px 60px rgba(255, 255, 255, 0.1);
+}
+
+.card-content h3 {
+  font-size: 1.75rem;
+  margin-bottom: 16px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.card-content p {
+  opacity: 0.8;
+  font-size: 1.05rem;
+  line-height: 1.6;
+}
+
+.card-arrow {
+  font-size: 2rem;
+  font-weight: 300;
+  opacity: 0.5;
+  transition: opacity 0.3s, transform 0.3s;
+}
+
+.inverted-card:hover .card-arrow {
+  opacity: 1;
+  transform: translateX(5px);
+}
+
+.thought-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.acrylic-panel {
+  position: relative;
+  background: rgba(128, 128, 128, 0.05);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(128, 128, 128, 0.1);
+  border-radius: 24px;
+  padding: 0;
+  cursor: pointer;
+  transition: transform 0.3s, box-shadow 0.3s;
+  overflow: hidden;
+}
+
+.acrylic-panel:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+
+.thought-item.has-cover {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  padding: 24px;
+  gap: 24px;
+}
+
+/* Cover Image in Recent Blogs */
+.thought-cover-bg {
+  position: relative;
+  width: 160px;
+  min-width: 160px;
+  height: 120px;
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.thought-cover-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thought-cover-fade {
+  display: none;
+}
+
+:global(.dark) .thought-cover-fade {
+  display: none;
+}
+
+.thought-inner {
+  position: relative;
+  z-index: 1;
+  padding: 40px;
+  flex: 1;
+  min-width: 0;
+}
+
+.thought-item.has-cover .thought-inner {
+  padding: 0;
+}
+
+.recent-thoughts {
+  max-width: 800px;
+}
+
+.thought-meta {
+  font-size: 0.875rem;
+  opacity: 0.5;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 16px;
   font-weight: 600;
 }
 
-.card p {
-  opacity: 0.8;
-  font-size: 1rem;
-}
-
-.recent-posts {
-  max-width: 800px;
-  margin-bottom: 80px;
-}
-
-.post-list {
-  display: flex;
-  flex-direction: column;
-  gap: 40px;
-}
-
-.post-item {
-  padding-bottom: 40px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.post-item:last-child {
-  border-bottom: none;
-}
-
-.post-meta {
-  font-size: 0.875rem;
-  opacity: 0.6;
-  margin-bottom: 8px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.post-title {
-  font-size: 1.75rem;
-  font-weight: 700;
-  margin-bottom: 12px;
+.thought-text {
+  font-size: 1.5rem;
+  line-height: 1.6;
+  font-weight: 500;
   letter-spacing: -0.5px;
-  cursor: pointer;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.post-title:hover {
-  text-decoration: underline;
+.acrylic-panel:not(.has-cover) .thought-text {
+  white-space: normal;
 }
 
-.post-excerpt {
-  font-size: 1.125rem;
-  opacity: 0.8;
-  line-height: 1.5;
-}
-
+/* Mobile Adaptation */
 @media (max-width: 768px) {
+  .hero {
+    min-height: auto;
+    padding: 60px 0;
+    flex-direction: column;
+    text-align: left;
+  }
+
+  .hero-visual {
+    display: none;
+  }
+
   .hero h1 {
     font-size: 3.5rem;
+  }
+  
+  .greeting {
+    font-size: 2rem;
+  }
+
+  .subtitle {
+    font-size: 1.2rem;
+  }
+
+  .section-title {
+    font-size: 2rem;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inverted-card {
+    padding: 30px;
+  }
+
+  .thought-text {
+    font-size: 1.25rem;
+  }
+  
+  .thought-inner {
+    padding: 30px;
+  }
+  
+  .thought-item.has-cover {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .thought-cover-bg {
+    width: 100%;
+    max-width: 100%;
+    height: 200px;
   }
 }
 </style>

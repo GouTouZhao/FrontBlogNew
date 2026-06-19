@@ -52,7 +52,9 @@ export const fetchArticles = async () => {
         excerpt: item.content ? item.content.substring(0, 100) : '暂无简介',
         date: dateStr,
         viewCount: item.view_count || 0,
-        likeCount: item.like_count || 0
+        likeCount: item.like_count || 0,
+        coverImage: item.cover_image || '',
+        authorId: item.author_id || ''
       };
     });
     

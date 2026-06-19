@@ -1,7 +1,8 @@
 <script setup>
-import { computed, watch, onMounted, nextTick, onUnmounted } from 'vue';
+import { computed, watch, ref, onMounted, nextTick, onUnmounted } from 'vue';
 import { useRoute } from 'vue-router';
 import { partitions } from '../data/mock';
+import api from '../api';
 import { 
   currentPartition, 
   currentPage, 
@@ -24,6 +25,46 @@ const currentPartitionObj = computed(() => {
 const isAdmin = computed(() => {
   return localStorage.getItem('user_email') === '2460607806@qq.com';
 });
+
+// Cover image URL cache
+const coverImageUrls = ref({});
+
+// Visibility state for animations
+const visibleItems = ref(new Set());
+
+const loadCoverImage = async (item) => {
+  if (!item.coverImage || coverImageUrls.value[item.id]) return;
+  
+  try {
+    const token = localStorage.getItem('access_token');
+    if (token) {
+      // Logged in: use bmanager/get_image_url for signed URL
+      const userId = localStorage.getItem('user_id') || '0';
+      const email = localStorage.getItem('user_email') || '';
+      const payloadStr = `{"base":{"access_token":${JSON.stringify(token)},"user_id":${userId},"email":${JSON.stringify(email)}},"image_key":${JSON.stringify(item.coverImage)}}`;
+      const res = await api.post('/bmanager/get_image_url', payloadStr, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (res.data && res.data.data && res.data.data.url) {
+        coverImageUrls.value[item.id] = res.data.data.url;
+      }
+    } else {
+      // Not logged in: use proxy endpoint
+      coverImageUrls.value[item.id] = `${api.defaults.baseURL}/image/get_image?key=${encodeURIComponent(item.coverImage)}`;
+    }
+  } catch (e) {
+    console.error('Failed to load cover image:', e);
+  }
+};
+
+// Watch for list changes to load cover images
+watch(paginatedList, async (newList) => {
+  for (const item of newList) {
+    if (item.coverImage) {
+      loadCoverImage(item);
+    }
+  }
+}, { immediate: true });
 
 const prevPage = async () => {
   if (hasPrevPage.value) {
@@ -49,6 +90,12 @@ const initObserver = () => {
   observer = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
       if (entry.isIntersecting) {
+        const id = entry.target.dataset.id;
+        if (id) {
+          visibleItems.value.add(id);
+          // Trigger Vue reactivity
+          visibleItems.value = new Set(visibleItems.value);
+        }
         entry.target.classList.add('visible');
       }
     });
@@ -64,6 +111,8 @@ const initObserver = () => {
 watch(() => route.params.partition, async (newPartition) => {
   currentPartition.value = newPartition;
   currentPage.value = 1;
+  coverImageUrls.value = {};
+  visibleItems.value = new Set();
   await nextTick();
   initObserver();
 }, { immediate: true });
@@ -107,13 +156,25 @@ onUnmounted(() => {
         <article 
           v-for="(item, index) in paginatedList" 
           :key="item.id" 
+          :data-id="item.id"
           class="post-item list-reveal"
+          :class="{ 
+            'has-cover': item.coverImage && coverImageUrls[item.id],
+            'visible': visibleItems.has(item.id)
+          }"
           :style="{ transitionDelay: `${index * 80}ms` }"
           @click="$router.push(`/article/${item.id}`)"
         >
-          <div class="post-meta">{{ currentPartitionObj.name }} • {{ item.date }} • {{ item.viewCount }} 次浏览</div>
-          <h3 class="post-title">{{ item.title }}</h3>
-          <p class="post-excerpt">{{ item.excerpt }}</p>
+          <!-- Cover Image Background -->
+          <div v-if="item.coverImage && coverImageUrls[item.id]" class="post-cover-bg">
+            <img :src="coverImageUrls[item.id]" alt="" />
+            <div class="post-cover-fade"></div>
+          </div>
+          
+          <div class="post-inner">
+            <div class="post-meta">{{ currentPartitionObj.name }} • {{ item.date }} • {{ item.viewCount }} 次浏览</div>
+            <h3 class="post-title">{{ item.title }}</h3>
+          </div>
         </article>
       </div>
 
@@ -217,12 +278,65 @@ onUnmounted(() => {
 }
 
 .post-item {
+  position: relative;
   padding-bottom: 40px;
   border-bottom: 1px solid var(--border-color);
+  overflow: hidden;
+  border-radius: 0;
+}
+
+.post-item.has-cover {
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  padding: 24px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 24px;
 }
 
 .post-item:last-child {
   border-bottom: none;
+}
+
+/* Cover Image in List */
+.post-cover-bg {
+  position: relative;
+  width: 160px;
+  min-width: 160px;
+  height: 120px;
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.post-cover-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.post-cover-fade {
+  display: none;
+}
+
+:global(.dark) .post-cover-fade {
+  display: none;
+}
+
+.post-inner {
+  position: relative;
+  z-index: 1;
+  padding: 20px 24px;
+  flex: 1;
+  min-width: 0;
+}
+
+.post-item:not(.has-cover) .post-inner,
+.post-item.has-cover .post-inner {
+  padding: 0;
 }
 
 .post-meta {
@@ -236,19 +350,21 @@ onUnmounted(() => {
 .post-title {
   font-size: 1.75rem;
   font-weight: 700;
-  margin-bottom: 12px;
+  margin-bottom: 0;
   letter-spacing: -0.5px;
   cursor: pointer;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.post-item:not(.has-cover) .post-title {
+  white-space: normal;
 }
 
 .post-title:hover {
   text-decoration: underline;
-}
-
-.post-excerpt {
-  font-size: 1.125rem;
-  opacity: 0.8;
-  line-height: 1.5;
 }
 
 .pagination-footer {
@@ -316,6 +432,17 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .partition-title {
     font-size: 3rem;
+  }
+  
+  .post-item.has-cover {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .post-cover-bg {
+    width: 100%;
+    max-width: 100%;
+    height: 200px;
   }
 }
 </style>

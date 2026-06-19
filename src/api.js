@@ -6,7 +6,19 @@ const api = axios.create({
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  transformResponse: [function (data) {
+    if (typeof data === 'string') {
+      try {
+        // Fix JavaScript int64 precision loss by wrapping large IDs in quotes before parsing
+        const fixedData = data.replace(/"(user_id|author_id|article_id|id)":\s*(\d{15,20})/g, '"$1":"$2"');
+        return JSON.parse(fixedData);
+      } catch (e) {
+        return data;
+      }
+    }
+    return data;
+  }]
 });
 
 let isRefreshing = false;

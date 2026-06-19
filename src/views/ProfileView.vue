@@ -6,66 +6,120 @@ import { showToast } from '../utils/toast';
 
 const router = useRouter();
 
-const state = reactive({
-  ctrlV: '',
-  showAvatar: false,
-  name: '',
-  wechatLabel: '',
-  wechatValue: '',
-  emailLabel: '',
-  emailValue: '',
-  desc: ''
-});
-
 const isEditingName = ref(false);
 const editingNameValue = ref('');
 
 const currentUser = ref(null);
-const cursorAt = ref('ctrlV');
-
-const sequence = [
-  { key: 'ctrlV', text: 'Ctrl+V', delayAfter: 400 },
-  { action: () => { state.ctrlV = ''; state.showAvatar = true; cursorAt.value = 'name'; }, delayAfter: 500 },
-  { key: 'name', text: 'GouTou', delayAfter: 300 },
-  { action: () => { cursorAt.value = 'wechatLabel'; } },
-  { key: 'wechatLabel', text: '微信', delayAfter: 200 },
-  { action: () => { cursorAt.value = 'wechatValue'; } },
-  { key: 'wechatValue', text: 'goutouspare', delayAfter: 300 },
-  { action: () => { cursorAt.value = 'emailLabel'; } },
-  { key: 'emailLabel', text: '邮箱', delayAfter: 200 },
-  { action: () => { cursorAt.value = 'emailValue'; } },
-  { key: 'emailValue', text: '3057907836@qq.com', delayAfter: 300 },
-  { action: () => { cursorAt.value = 'desc'; } },
-  { key: 'desc', text: 'SYSU，在这里分享我的创意和生活', delayAfter: 0 }
-];
-
-const startTypingSequence = async () => {
-  for (const step of sequence) {
-    if (step.action) {
-      step.action();
-    }
-    if (step.key && step.text) {
-      cursorAt.value = step.key;
-      for (let i = 0; i < step.text.length; i++) {
-        state[step.key] += step.text[i];
-        await new Promise(r => setTimeout(r, 100)); // 100ms per character
-      }
-    }
-    if (step.delayAfter) {
-      await new Promise(r => setTimeout(r, step.delayAfter));
-    }
-  }
-};
 
 const checkAuth = () => {
   const token = localStorage.getItem('access_token');
   if (token) {
     currentUser.value = {
-      id: localStorage.getItem('user_id'),
+      id: localStorage.getItem('user_id'),  // Keep as string to avoid precision loss
       email: localStorage.getItem('user_email'),
       nickname: localStorage.getItem('user_nickname'),
-      token: token
+      token: token,
+      protoUrl: localStorage.getItem('user_proto_url') || ''
     };
+  }
+};
+
+const currentAvatarUrl = ref('');
+const loadUserAvatar = async () => {
+  if (currentUser.value && currentUser.value.protoUrl) {
+    try {
+      // Use manual JSON to preserve int64 precision for user_id
+      const payloadStr = `{"base":{"access_token":${JSON.stringify(currentUser.value.token)},"email":${JSON.stringify(currentUser.value.email)},"user_id":${currentUser.value.id}},"image_key":${JSON.stringify(currentUser.value.protoUrl)}}`;
+      const res = await api.post('/user/get_user_photo_compre', payloadStr, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (res.data && res.data.data && res.data.data.url) {
+        currentAvatarUrl.value = res.data.data.url;
+      }
+    } catch (e) {
+      console.error('Failed to load avatar', e);
+    }
+  }
+};
+
+const fileInput = ref(null);
+const uploadStatus = ref('');
+const ossKey = ref('');
+const previewUrl = ref('');
+
+const handleAvatarClick = () => {
+  if (currentUser.value) {
+    fileInput.value.click();
+  }
+};
+
+const handleFileChange = async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  previewUrl.value = URL.createObjectURL(file);
+  
+  try {
+    uploadStatus.value = 'uploading';
+    const ext = file.name.split('.').pop() || 'jpg';
+
+    // Use manual JSON to preserve int64 precision
+    const payloadStr = `{"base":{"access_token":${JSON.stringify(currentUser.value.token)},"email":${JSON.stringify(currentUser.value.email)},"user_id":${currentUser.value.id}},"file_ext":${JSON.stringify(ext)}}`;
+    const policyRes = await api.post('/bmanager/get_oss_key', payloadStr, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    const p = policyRes.data.data || policyRes.data;
+    
+    const formData = new FormData();
+    formData.append('key', p.key);
+    formData.append('policy', p.policy);
+    formData.append('OSSAccessKeyId', p.oss_access_key_id);
+    formData.append('success_action_status', '200');
+    formData.append('signature', p.signature);
+    formData.append('x-oss-security-token', p.security_token);
+    formData.append('file', file);
+    
+    // Use fetch() instead of api.post() to avoid CORS withCredentials conflict
+    const uploadRes = await fetch(p.host, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!uploadRes.ok) {
+      throw new Error(`上传到OSS失败: ${uploadRes.status}`);
+    }
+    
+    ossKey.value = p.key;
+    uploadStatus.value = 'success';
+    showToast('图片上传成功，请点击更新保存', 'success');
+  } catch (error) {
+    uploadStatus.value = 'error';
+    console.error('Upload error:', error);
+    showToast('上传失败: ' + (error.message || ''), 'error');
+  }
+};
+
+const confirmUpdateAvatar = async () => {
+  if (!ossKey.value) return;
+  try {
+    // Use manual JSON to preserve int64 precision
+    const payloadStr = `{"base":{"access_token":${JSON.stringify(currentUser.value.token)},"email":${JSON.stringify(currentUser.value.email)},"user_id":${currentUser.value.id}},"image_key":${JSON.stringify(ossKey.value)}}`;
+    const res = await api.post('/user/post_update_profile_photo', payloadStr, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    const newUserInfo = (res.data.data || res.data).user_info;
+    localStorage.setItem('user_proto_url', newUserInfo.proto_url);
+    currentUser.value.protoUrl = newUserInfo.proto_url;
+    
+    uploadStatus.value = '';
+    ossKey.value = '';
+    previewUrl.value = '';
+    loadUserAvatar();
+    showToast('头像更新成功', 'success');
+  } catch (e) {
+    console.error(e);
+    showToast('更新头像失败', 'error');
   }
 };
 
@@ -81,19 +135,20 @@ const saveName = async () => {
   }
   
   try {
-    await api.post('/user/update_user_info', {
-      base: {
-        access_token: currentUser.value.token,
-        email: currentUser.value.email,
-        user_id: parseInt(currentUser.value.id)
-      },
-      nick_name: editingNameValue.value
+    // Use manual JSON to preserve int64 precision for user_id
+    const payloadStr = `{"base":{"access_token":${JSON.stringify(currentUser.value.token)},"email":${JSON.stringify(currentUser.value.email)},"user_id":${currentUser.value.id}},"nick_name":${JSON.stringify(editingNameValue.value)}}`;
+    await api.post('/user/update_user_info', payloadStr, {
+      headers: { 'Content-Type': 'application/json' }
     });
     
     // Update local storage and current user
     localStorage.setItem('user_nickname', editingNameValue.value);
     currentUser.value.nickname = editingNameValue.value;
     isEditingName.value = false;
+    
+    // Also notify App.vue to update sidebar nickname
+    window.dispatchEvent(new Event('auth-updated'));
+    
     showToast('名称修改成功', 'success');
   } catch (error) {
     console.error(error);
@@ -103,20 +158,11 @@ const saveName = async () => {
 
 onMounted(() => {
   checkAuth();
-  if (currentUser.value) {
-    // If logged in, skip typing animation and show user data
-    state.showAvatar = true;
-    state.name = currentUser.value.nickname;
-    state.wechatLabel = '微信';
-    state.wechatValue = '未绑定';
-    state.emailLabel = '邮箱';
-    state.emailValue = currentUser.value.email;
-    state.desc = '欢迎来到你的个人中心';
-    cursorAt.value = ''; // Remove cursor
+  if (!currentUser.value) {
+    showToast('请先登录', 'warning');
+    router.push('/');
   } else {
-    setTimeout(() => {
-      startTypingSequence();
-    }, 500);
+    loadUserAvatar();
   }
 });
 </script>
@@ -127,17 +173,25 @@ onMounted(() => {
       <div class="profile-card">
         
         <div class="avatar-container">
-          <span v-if="!state.showAvatar" class="typed-text">{{ state.ctrlV }}<span v-if="cursorAt === 'ctrlV'" class="cursor">|</span></span>
-          <div v-else class="avatar-wrapper">
-             <img v-if="!currentUser" src="../assets/GouTou.jpg" alt="GouTou Avatar" class="avatar-large" />
-             <div v-else class="avatar-text-large">{{ currentUser.nickname.charAt(0).toUpperCase() }}</div>
+          <div class="avatar-wrapper clickable" @click="handleAvatarClick">
+             <template v-if="currentUser">
+               <img v-if="previewUrl" :src="previewUrl" alt="Preview Avatar" class="avatar-large preview-img" />
+               <img v-else-if="currentAvatarUrl" :src="currentAvatarUrl" alt="User Avatar" class="avatar-large" />
+               <div v-else class="avatar-text-large">用</div>
+               <div class="avatar-hover-overlay">更换头像</div>
+             </template>
           </div>
         </div>
         
+        <div v-if="uploadStatus === 'success'" class="avatar-actions fade-in">
+           <button class="save-btn" @click="confirmUpdateAvatar">更新头像</button>
+           <button class="cancel-btn" @click="uploadStatus = ''; previewUrl = ''; ossKey = '';">取消</button>
+        </div>
+        <input type="file" ref="fileInput" style="display: none" accept="image/*" @change="handleFileChange" />
+        
         <div class="name-container">
           <h1 v-if="!isEditingName" class="name">
-            <span class="typed-text">{{ currentUser ? currentUser.nickname : state.name }}</span>
-            <span v-if="cursorAt === 'name'" class="cursor">|</span>
+            <span class="typed-text">{{ currentUser ? currentUser.nickname : '' }}</span>
             <button v-if="currentUser" class="edit-btn" @click="handleEditName">修改</button>
           </h1>
           <div v-else class="name-edit">
@@ -150,24 +204,16 @@ onMounted(() => {
         <div class="contact-info">
           <div class="info-item">
             <span class="label">
-              <span class="typed-text">{{ state.wechatLabel }}</span><span v-if="cursorAt === 'wechatLabel'" class="cursor">|</span>
+              <span class="typed-text">邮箱</span>
             </span>
             <span class="value">
-              <span class="typed-text">{{ state.wechatValue }}</span><span v-if="cursorAt === 'wechatValue'" class="cursor">|</span>
-            </span>
-          </div>
-          <div class="info-item">
-            <span class="label">
-              <span class="typed-text">{{ state.emailLabel }}</span><span v-if="cursorAt === 'emailLabel'" class="cursor">|</span>
-            </span>
-            <span class="value">
-              <span class="typed-text">{{ state.emailValue }}</span><span v-if="cursorAt === 'emailValue'" class="cursor">|</span>
+              <span class="typed-text">{{ currentUser ? currentUser.email : '' }}</span>
             </span>
           </div>
         </div>
 
         <div class="description-container">
-          <span class="typed-text">{{ state.desc }}</span><span v-if="cursorAt === 'desc'" class="cursor">|</span>
+          <span class="typed-text">欢迎来到你的个人中心</span>
         </div>
       </div>
     </div>
@@ -242,6 +288,43 @@ onMounted(() => {
   font-size: 3rem;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.avatar-wrapper.clickable {
+  cursor: pointer;
+  position: relative;
+}
+
+.avatar-hover-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.5);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.avatar-wrapper.clickable:hover .avatar-hover-overlay {
+  opacity: 1;
+}
+
+.preview-img {
+  opacity: 0.8;
+}
+
+.avatar-actions {
+  margin-bottom: 24px;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
 }
 
 @keyframes fadeIn {
@@ -368,15 +451,4 @@ onMounted(() => {
   min-height: 2.25rem;
 }
 
-.cursor {
-  display: inline-block;
-  font-weight: 400;
-  animation: blink 1s step-end infinite;
-  margin-left: 2px;
-  color: var(--text-color);
-}
-
-@keyframes blink {
-  50% { opacity: 0; }
-}
 </style>

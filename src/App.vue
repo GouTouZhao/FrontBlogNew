@@ -44,11 +44,13 @@ const checkAuth = () => {
 onMounted(() => {
   checkAuth();
   window.addEventListener('auth-expired', handleAuthExpired);
+  window.addEventListener('auth-updated', checkAuth);
 });
 
 import { onUnmounted } from 'vue';
 onUnmounted(() => {
   window.removeEventListener('auth-expired', handleAuthExpired);
+  window.removeEventListener('auth-updated', checkAuth);
 });
 
 const handleAuthExpired = () => {
@@ -61,6 +63,9 @@ const handleAuthExpired = () => {
 import { watch } from 'vue';
 watch(() => route.path, () => {
   checkAuth();
+  if (route.name !== 'partition' && route.name !== 'post' && route.name !== 'article') {
+    currentPartition.value = null;
+  }
 });
 
 const toggleTheme = () => {
@@ -88,8 +93,16 @@ const goToPost = () => {
   router.push('/post');
 };
 
-const goToProfile = () => {
-  router.push('/profile');
+const goToAuthor = () => {
+  router.push('/author');
+};
+
+const handleUserClick = () => {
+  if (currentUser.value.isLoggedIn) {
+    router.push('/profile');
+  } else {
+    handleAuthAction();
+  }
 };
 
 const prevPage = async () => {
@@ -140,7 +153,7 @@ const handleAuthAction = () => {
           {{ isDark ? '日间模式' : '夜间模式' }}
         </button>
 
-        <div v-if="isSidebarExpanded" class="profile-link" @click="goToProfile">
+        <div v-if="isSidebarExpanded" class="profile-link" @click="goToAuthor">
           <img src="./assets/GouTou.jpg" alt="Avatar" class="avatar-small" />
           <span class="profile-name">GouTou</span>
         </div>
@@ -184,16 +197,16 @@ const handleAuthAction = () => {
         <div class="user-info">
           <div 
             class="avatar-text" 
-            @click="!currentUser.isLoggedIn && handleAuthAction()"
-            :style="{ cursor: currentUser.isLoggedIn ? 'default' : 'pointer' }"
+            @click="handleUserClick"
+            style="cursor: pointer"
           >
             {{ currentUser.nickname.charAt(0).toUpperCase() }}
           </div>
           <div class="user-details">
             <span 
               class="user-name" 
-              @click="!currentUser.isLoggedIn && handleAuthAction()"
-              :style="{ cursor: currentUser.isLoggedIn ? 'default' : 'pointer' }"
+              @click="handleUserClick"
+              style="cursor: pointer"
             >
               {{ currentUser.nickname }}
             </span>
@@ -320,6 +333,7 @@ const handleAuthAction = () => {
   cursor: pointer;
   margin-bottom: 8px;
   transition: opacity 0.2s;
+  white-space: nowrap;
 }
 
 .publish-post-btn:hover {

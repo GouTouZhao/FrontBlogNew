@@ -1,10 +1,11 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '../api';
 import { showToast } from '../utils/toast';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
+import Compressor from 'compressorjs';
 
 const route = useRoute();
 const router = useRouter();
@@ -24,6 +25,9 @@ const hasMoreComments = ref(true);
 const isFetchingComments = ref(false);
 const orderByLatest = ref(true);
 
+// Cover image
+const coverImageUrl = ref('');
+
 const checkAuth = () => {
   const token = localStorage.getItem('access_token');
   const userId = localStorage.getItem('user_id');
@@ -31,6 +35,31 @@ const checkAuth = () => {
   const email = localStorage.getItem('user_email');
   if (token && userId) {
     currentUser.value = { id: userId, email: email || '', token: token, nickname: nickname || '用户' };
+  }
+};
+
+// Check if current user is the author
+const isOwner = () => {
+  if (!currentUser.value || !article.value) return false;
+  return String(article.value.author_id) === String(currentUser.value.id);
+};
+
+const loadCoverImage = async () => {
+  if (!article.value || !article.value.cover_image) return;
+  try {
+    if (currentUser.value) {
+      const payloadStr = `{"base":{"access_token":${JSON.stringify(currentUser.value.token)},"user_id":${currentUser.value.id},"email":${JSON.stringify(currentUser.value.email)}},"image_key":${JSON.stringify(article.value.cover_image)}}`;
+      const res = await api.post('/bmanager/get_image_url', payloadStr, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+      if (res.data && res.data.data && res.data.data.url) {
+        coverImageUrl.value = res.data.data.url;
+      }
+    } else {
+      coverImageUrl.value = `${api.defaults.baseURL}/image/get_image?key=${encodeURIComponent(article.value.cover_image)}`;
+    }
+  } catch (e) {
+    console.error('Failed to load cover image:', e);
   }
 };
 
@@ -42,6 +71,9 @@ const fetchArticleDetails = async () => {
       const payload = res.data.data || res.data;
       article.value = payload.article || {};
       author.value = payload.user_info || null;
+      
+      // Load cover image
+      loadCoverImage();
       
       viewTimer = setTimeout(async () => {
         try {
@@ -59,7 +91,36 @@ const fetchArticleDetails = async () => {
     console.error(error);
   } finally {
     isLoading.value = false;
+    // Now that isLoading is false, the markdown body will be mounted.
+    // Wait for the DOM update to finish, then load inline images!
+    nextTick(() => {
+      if (article.value) {
+        loadInlineImages();
+      }
+    });
   }
+};
+
+const loadInlineImages = async () => {
+  if (!currentUser.value) return;
+  const images = document.querySelectorAll('.lazy-oss-image');
+  images.forEach(async (img) => {
+    const key = img.getAttribute('data-oss-key');
+    if (key && !img.dataset.loaded) {
+      img.dataset.loaded = 'true'; // Prevent duplicate loads
+      try {
+        const payloadStr = `{"base":{"access_token":${JSON.stringify(currentUser.value.token)},"user_id":${currentUser.value.id},"email":${JSON.stringify(currentUser.value.email)}},"image_key":${JSON.stringify(key)}}`;
+        const res = await api.post('/bmanager/get_image_url', payloadStr, {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (res.data && res.data.data && res.data.data.url) {
+          img.src = res.data.data.url;
+        }
+      } catch (e) {
+        console.error('Failed to load inline image:', e);
+      }
+    }
+  });
 };
 
 const fetchComments = async (reset = false) => {
@@ -91,6 +152,8 @@ const fetchComments = async (reset = false) => {
         c.sonList = [];
         c.showSons = false;
         c.fetchingSons = false;
+        c.avatar_url = '';
+        loadAvatar(c);
       });
 
       comments.value = [...comments.value, ...list];
@@ -104,6 +167,70 @@ const fetchComments = async (reset = false) => {
     console.error('获取评论失败', error);
   } finally {
     isFetchingComments.value = false;
+  }
+};
+
+const loadAvatar = async (comment) => {
+  if (!comment.user_info) return;
+  if (!comment.user_info.proto_url) {
+    comment.avatar_url = null;
+    return;
+  }
+  
+  if (currentUser.value) {
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        const payloadStr = `{"base":{"access_token":${JSON.stringify(currentUser.value.token)},"email":${JSON.stringify(currentUser.value.email)},"user_id":${currentUser.value.id}},"image_key":${JSON.stringify(comment.user_info.proto_url)}}`;
+        const res = await api.post('/user/get_user_photo_compre', payloadStr, {
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (res.data && res.data.data && res.data.data.url) {
+          comment.avatar_url = res.data.data.url;
+          return;
+        }
+        retries--;
+      } catch (e) {
+        retries--;
+        if (retries === 0) console.error('Failed to load avatar', e);
+      }
+    }
+  } else {
+    try {
+      const res = await api.get('/image/get_avatar_thumbnail', {
+        params: { image_key: comment.user_info.proto_url },
+        responseType: 'blob'
+      });
+      if (res.data) {
+        comment.avatar_url = URL.createObjectURL(res.data);
+      }
+    } catch (e) {
+      console.error('Failed to load avatar blob', e);
+    }
+  }
+};
+
+const largeAvatarUrl = ref('');
+const isLargeAvatarVisible = ref(false);
+
+const viewLargeAvatar = async (userInfo) => {
+  if (!userInfo || !userInfo.proto_url) return;
+  if (!currentUser.value) {
+    showToast('请先登录查看大图', 'warning');
+    return;
+  }
+  try {
+    const payloadStr = `{"base":{"access_token":${JSON.stringify(currentUser.value.token)},"email":${JSON.stringify(currentUser.value.email)},"user_id":${currentUser.value.id}},"image_key":${JSON.stringify(userInfo.proto_url)}}`;
+    const res = await api.post('/user/get_image_url', payloadStr, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (res.data && res.data.data && res.data.data.url) {
+      largeAvatarUrl.value = res.data.data.url;
+      isLargeAvatarVisible.value = true;
+    }
+  } catch (error) {
+    console.error('Failed to get large avatar URL:', error);
+    showToast('获取大图失败', 'error');
   }
 };
 
@@ -121,25 +248,30 @@ const handleScroll = () => {
 
 const renderer = new marked.Renderer();
 const originalImage = renderer.image.bind(renderer);
-renderer.image = (href, title, text) => {
-  if (href.startsWith('oss_key:')) {
+renderer.image = (arg1, arg2, arg3) => {
+  let href = typeof arg1 === 'object' && arg1 !== null ? arg1.href : arg1;
+  let text = typeof arg1 === 'object' && arg1 !== null ? arg1.text : arg3;
+  
+  if (typeof href === 'string' && href.startsWith('oss_key:')) {
     const key = href.replace('oss_key:', '');
-    return `<img src="${api.defaults.baseURL}/image/get_image?key=${encodeURIComponent(key)}" alt="${text || 'image'}">`;
+    if (currentUser.value) {
+      // Use a transparent 1x1 GIF as a placeholder and add data-oss-key for async loading
+      return `<img src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" data-oss-key="${key}" alt="${text || 'image'}" class="markdown-image lazy-oss-image">`;
+    } else {
+      // Fallback for unlogged users (will hit the rate-limited proxy)
+      return `<img src="${api.defaults.baseURL}/image/get_image?key=${encodeURIComponent(key)}" alt="${text || 'image'}" class="markdown-image">`;
+    }
   }
-  return originalImage(href, title, text);
+  return originalImage(arg1, arg2, arg3);
 };
-marked.use({ renderer });
+marked.use({ renderer, breaks: true });
 
 const deleteForum = async () => {
   if (!confirm('确定要删除这篇帖子吗？该操作不可恢复！')) return;
   try {
-    const res = await api.post('/bmanager/delete_forum', {
-      article_id: article.value.article_id,
-      user_id: parseInt(currentUser.value.id)
-    }, {
-      headers: {
-        'x-token': currentUser.value.token
-      }
+    const payloadStr = `{"article_id":${JSON.stringify(article.value.article_id)},"user_id":${currentUser.value.id}}`;
+    const res = await api.post('/bmanager/delete_forum', payloadStr, {
+      headers: { 'Content-Type': 'application/json', 'x-token': currentUser.value.token }
     });
     if (res.data && res.data.errCode === 0) {
       showToast('删除成功', 'success');
@@ -153,42 +285,7 @@ const deleteForum = async () => {
   }
 };
 
-// Edit Post Modal
-const isEditing = ref(false);
-const editTitle = ref('');
-const editContent = ref('');
-const editCover = ref('');
-
-const openEditModal = () => {
-  editTitle.value = article.value.title;
-  editContent.value = article.value.content;
-  editCover.value = article.value.cover_image;
-  isEditing.value = true;
-};
-
-const saveEdit = async () => {
-  if (!editTitle.value.trim() || !editContent.value.trim()) {
-    showToast('标题和内容不能为空', 'warning');
-    return;
-  }
-  try {
-    const payload = `{"article_id":${JSON.stringify(article.value.article_id)},"title":${JSON.stringify(editTitle.value)},"content":${JSON.stringify(editContent.value)},"cover_image":${JSON.stringify(editCover.value)},"user_id":${currentUser.value.id}}`;
-    const res = await api.post('/bmanager/update_forum', payload, {
-      headers: { 'Content-Type': 'application/json', 'x-token': currentUser.value.token }
-    });
-    if (res.data && res.data.errCode === 0) {
-      showToast('修改成功', 'success');
-      isEditing.value = false;
-      fetchArticleDetails(); // reload details
-    } else {
-      showToast(res.data.errMsg || '修改失败', 'error');
-    }
-  } catch (error) {
-    console.error(error);
-    showToast('修改出错', 'error');
-  }
-};
-
+// (Edit functionality moved to PostView)
 
 const submitComment = async (replyToComment = null) => {
   let content = commentContent.value;
@@ -223,24 +320,15 @@ const submitComment = async (replyToComment = null) => {
 
   try {
     const articleId = route.params.id;
-    await api.post('/bmanager/push_forum_comment_new', {
-      base: {
-        access_token: currentUser.value.token,
-        email: currentUser.value.email,
-        user_id: parseInt(currentUser.value.id)
-      },
-      article_id: articleId,
-      content: content,
-      is_reply: isReply,
-      root_comment_id: rootId,
-      reply_to_user_id: replyToUserId
+    const payloadStr = `{"base":{"access_token":${JSON.stringify(currentUser.value.token)},"email":${JSON.stringify(currentUser.value.email)},"user_id":${currentUser.value.id}},"article_id":${JSON.stringify(articleId)},"content":${JSON.stringify(content)},"is_reply":${isReply},"root_comment_id":"${rootId}","reply_to_user_id":${replyToUserId}}`;
+    await api.post('/bmanager/push_forum_comment_new', payloadStr, {
+      headers: { 'Content-Type': 'application/json' }
     });
     showToast('发表成功', 'success');
     
     if (replyToComment) {
       replyToComment.replyContent = '';
       replyToComment.replying = false;
-      // Refresh son comments
       fetchSonComments(replyToComment, true);
     } else {
       commentContent.value = '';
@@ -308,6 +396,11 @@ const fetchSonComments = async (comment, reset = false) => {
       const list = payload.list || [];
       const total = payload.total_count || 0;
       
+      list.forEach(son => {
+        son.avatar_url = '';
+        loadAvatar(son);
+      });
+
       comment.sonList = [...comment.sonList, ...list];
       if (comment.sonList.length >= total) {
         comment.hasMoreSons = false;
@@ -323,7 +416,7 @@ const fetchSonComments = async (comment, reset = false) => {
 };
 
 const renderedContent = (content) => {
-  return DOMPurify.sanitize(marked.parse(content || '暂无内容'));
+  return DOMPurify.sanitize(marked.parse(content || '暂无内容'), { ADD_ATTR: ['data-oss-key'] });
 };
 
 let viewTimer = null;
@@ -348,7 +441,12 @@ onUnmounted(() => {
     <div v-else class="article-content">
       <button class="back-btn" @click="router.back()">返回</button>
       
-      <div class="article-header">
+      <!-- Article Header with Cover Image -->
+      <div class="article-header" :class="{ 'has-cover': coverImageUrl }">
+        <div v-if="coverImageUrl" class="header-cover-bg">
+          <img :src="coverImageUrl" alt="" />
+          <div class="header-cover-fade"></div>
+        </div>
         <h1 class="title">{{ article.title }}</h1>
         <div class="meta">
           <span v-if="author" class="author">作者: {{ author.nick_name }}</span>
@@ -357,14 +455,10 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div v-if="article.cover_image" class="cover-image">
-        <img :src="article.cover_image" alt="Cover" />
-      </div>
-
       <div class="markdown-body" v-html="renderedContent(article.content)"></div>
 
-      <div class="article-actions" v-if="currentUser && article.author_id === currentUser.id">
-        <button class="edit-btn" @click="openEditModal">修改</button>
+      <div class="article-actions" v-if="isOwner()">
+        <button class="edit-btn" @click="router.push(`/post?edit_id=${article.article_id}`)">修改</button>
         <button class="delete-btn" @click="deleteForum">删除</button>
       </div>
 
@@ -393,16 +487,24 @@ onUnmounted(() => {
 
         <div class="comments-list">
           <div v-for="comment in comments" :key="comment.id" class="comment-item fade-in">
-            <div class="comment-top">
-              <span class="comment-author">{{ comment.user_info?.nick_name || '用户' }}</span>
-              <span class="comment-time">{{ new Date(comment.created_at * 1000).toLocaleString() }}</span>
+            <div class="comment-content-wrap">
+              <div class="comment-avatar clickable" @click="viewLargeAvatar(comment.user_info)">
+                <img v-if="comment.avatar_url" :src="comment.avatar_url" alt="avatar" />
+                <div v-else class="default-avatar">{{ currentUser ? '用' : '游' }}</div>
+              </div>
+              <div class="comment-main">
+                <div class="comment-top">
+                  <span class="comment-author">{{ comment.user_info?.nick_name || '用户' }}</span>
+                  <span class="comment-time">{{ new Date(comment.created_at * 1000).toLocaleString() }}</span>
+                </div>
+                <div class="comment-text">{{ comment.content }}</div>
+              </div>
             </div>
-            <div class="comment-text">{{ comment.content }}</div>
             
             <div class="comment-actions">
               <button class="action-btn" @click="comment.replying = !comment.replying">回复</button>
               <button class="action-btn" v-if="comment.has_children" @click="fetchSonComments(comment)">查看回复</button>
-              <button class="action-btn delete" v-if="currentUser && comment.user_info?.user_id === currentUser.id" @click="deleteComment(comment.id)">删除</button>
+              <button class="action-btn delete" v-if="currentUser && String(comment.user_info?.user_id) === String(currentUser.id)" @click="deleteComment(comment.id)">删除</button>
             </div>
 
             <!-- Reply Input Box -->
@@ -417,14 +519,21 @@ onUnmounted(() => {
             <!-- Sub Comments -->
             <div v-if="comment.showSons" class="sub-comments">
               <div v-for="son in comment.sonList" :key="son.id" class="comment-item sub-comment fade-in">
-                <div class="comment-top">
-                  <span class="comment-author">{{ son.user_info?.nick_name || '用户' }} <span v-if="son.reply_to_user_info" class="reply-label">回复 {{ son.reply_to_user_info.nick_name }}</span></span>
-                  <span class="comment-time">{{ new Date(son.created_at * 1000).toLocaleString() }}</span>
+                <div class="comment-content-wrap">
+                  <div class="comment-avatar small-avatar clickable" @click="viewLargeAvatar(son.user_info)">
+                    <img v-if="son.avatar_url" :src="son.avatar_url" alt="avatar" />
+                    <div v-else class="default-avatar">{{ currentUser ? '用' : '游' }}</div>
+                  </div>
+                  <div class="comment-main">
+                    <div class="comment-top">
+                      <span class="comment-author">{{ son.user_info?.nick_name || '用户' }} <span v-if="son.reply_to_user_info" class="reply-label">回复 {{ son.reply_to_user_info.nick_name }}</span></span>
+                      <span class="comment-time">{{ new Date(son.created_at * 1000).toLocaleString() }}</span>
+                    </div>
+                    <div class="comment-text">{{ son.content }}</div>
+                  </div>
                 </div>
-                <div class="comment-text">{{ son.content }}</div>
                 <div class="comment-actions">
-                  <!-- Note: Subcomments can also be replied to, which effectively replies to the root thread -->
-                  <button class="action-btn delete" v-if="currentUser && son.user_info?.user_id === currentUser.id" @click="deleteComment(son.id, comment)">删除</button>
+                  <button class="action-btn delete" v-if="currentUser && String(son.user_info?.user_id) === String(currentUser.id)" @click="deleteComment(son.id, comment)">删除</button>
                 </div>
               </div>
               <button class="action-btn load-more" v-if="comment.hasMoreSons && !comment.fetchingSons" @click="fetchSonComments(comment)">加载更多回复</button>
@@ -441,18 +550,13 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Edit Modal -->
-    <div v-if="isEditing" class="preview-modal-overlay" @click.self="isEditing = false">
-      <div class="preview-modal">
-        <button class="close-btn" @click="isEditing = false">×</button>
-        <h2 style="margin-top:0;">修改帖子</h2>
-        <input class="edit-input title-input" v-model="editTitle" placeholder="标题" />
-        <input class="edit-input" v-model="editCover" placeholder="封面图片链接 (选填)" />
-        <textarea class="edit-textarea" v-model="editContent" placeholder="帖子内容..."></textarea>
-        <div class="edit-actions">
-          <button class="cancel-btn" @click="isEditing = false">取消</button>
-          <button class="submit-btn" @click="saveEdit">保存修改</button>
-        </div>
+
+
+    <!-- Large Avatar Modal -->
+    <div v-if="isLargeAvatarVisible" class="modal-overlay" @click="isLargeAvatarVisible = false">
+      <div class="large-avatar-modal" @click.stop>
+        <button class="close-btn" @click="isLargeAvatarVisible = false">×</button>
+        <img :src="largeAvatarUrl" alt="Large Avatar" class="large-avatar-img" />
       </div>
     </div>
   </div>
@@ -490,41 +594,95 @@ onUnmounted(() => {
   background: var(--border-color);
 }
 
+/* Article Header with Cover */
 .article-header {
+  position: relative;
   margin-bottom: 30px;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.article-header.has-cover {
+  padding: 30px 24px;
+  min-height: 120px;
+}
+
+.header-cover-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  max-width: 70%;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.header-cover-bg img {
+  height: 100%;
+  width: auto;
+  object-fit: cover;
+  display: block;
+  min-width: 120px;
+}
+
+.header-cover-fade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to right, transparent 10%, var(--bg-color) 70%);
+}
+
+:global(.dark) .header-cover-fade {
+  background: linear-gradient(to right, transparent 10%, var(--bg-color) 70%);
 }
 
 .title {
+  position: relative;
+  z-index: 1;
   font-size: 2.5rem;
   font-weight: 800;
   margin-bottom: 16px;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.article-header:not(.has-cover) .title {
+  white-space: normal;
 }
 
 .meta {
+  position: relative;
+  z-index: 1;
   display: flex;
   gap: 16px;
   font-size: 0.9rem;
   opacity: 0.7;
+  flex-wrap: wrap;
 }
 
-.cover-image {
-  margin-bottom: 30px;
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-}
-
-.cover-image img {
-  width: 100%;
-  height: auto;
-  display: block;
+.meta span {
+  white-space: nowrap;
 }
 
 .markdown-body {
   font-size: 1.1rem;
   line-height: 1.8;
   margin-bottom: 30px;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+}
+
+.markdown-body :deep(img) {
+  max-width: 100%;
+  border-radius: 8px;
+  display: block;
+  margin: 16px 0;
 }
 
 .article-actions {
@@ -644,6 +802,56 @@ textarea:focus {
   background: rgba(128, 128, 128, 0.05);
   border-radius: 12px;
   border: 1px solid transparent;
+}
+
+.comment-content-wrap {
+  display: flex;
+  gap: 12px;
+}
+
+.comment-avatar {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--border-color);
+}
+
+.comment-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.comment-avatar.clickable {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.comment-avatar.clickable:hover {
+  opacity: 0.8;
+}
+
+.small-avatar {
+  width: 32px;
+  height: 32px;
+}
+
+.default-avatar {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: var(--text-color);
+  opacity: 0.7;
+}
+
+.comment-main {
+  flex-grow: 1;
 }
 
 .dark .comment-item {
@@ -774,6 +982,7 @@ textarea:focus {
   flex-direction: column;
   gap: 16px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+  overflow-y: auto;
 }
 
 .close-btn {
@@ -785,10 +994,17 @@ textarea:focus {
   font-size: 24px;
   cursor: pointer;
   color: var(--text-color);
+  z-index: 1;
+}
+
+.edit-title-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
 }
 
 .edit-input {
-  width: 100%;
+  flex: 1;
   background: transparent;
   border: 1px solid var(--border-color);
   padding: 12px;
@@ -802,6 +1018,58 @@ textarea:focus {
   font-weight: bold;
 }
 
+.btn-edit-cover {
+  white-space: nowrap;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-color);
+  transition: all 0.2s;
+}
+
+.btn-edit-cover:hover {
+  background: var(--text-color);
+  color: var(--bg-color);
+}
+
+.edit-cover-preview {
+  position: relative;
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 100px;
+  cursor: pointer;
+}
+
+.edit-cover-preview img {
+  height: 80px;
+  width: auto;
+  max-width: 60%;
+  object-fit: cover;
+  display: block;
+}
+
+.edit-cover-fade {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to right, transparent 30%, var(--bg-color) 70%);
+  pointer-events: none;
+}
+
+.edit-cover-hint {
+  position: absolute;
+  bottom: 4px;
+  right: 8px;
+  font-size: 0.7rem;
+  opacity: 0.5;
+}
+
 .edit-textarea {
   flex: 1;
   min-height: 300px;
@@ -809,9 +1077,27 @@ textarea:focus {
 
 .edit-actions {
   display: flex;
-  justify-content: flex-end;
   gap: 12px;
+  align-items: center;
 }
+
+.btn-edit-img {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--border-color);
+  background: transparent;
+  color: var(--text-color);
+  transition: all 0.2s;
+}
+
+.btn-edit-img:hover {
+  background: var(--text-color);
+  color: var(--bg-color);
+}
+
 .submit-btn {
   background: var(--text-color);
   color: var(--bg-color);
@@ -819,5 +1105,41 @@ textarea:focus {
   padding: 8px 24px;
   border-radius: 8px;
   cursor: pointer;
+  font-weight: 600;
 }
+
+/* Large Avatar Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1001;
+}
+
+.large-avatar-modal {
+  position: relative;
+  background: var(--bg-color);
+  padding: 16px;
+  border-radius: 12px;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.large-avatar-img {
+  max-width: 100%;
+  max-height: 80vh;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
 </style>
