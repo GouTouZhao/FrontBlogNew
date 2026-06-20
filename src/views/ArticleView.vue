@@ -44,19 +44,14 @@ const isOwner = () => {
   return String(article.value.author_id) === String(currentUser.value.id);
 };
 
+import { getOssImageUrl } from '../utils/imageCache';
+
 const loadCoverImage = async () => {
   if (!article.value || !article.value.cover_image) return;
   try {
-    if (currentUser.value) {
-      const payloadStr = `{"base":{"access_token":${JSON.stringify(currentUser.value.token)},"user_id":${currentUser.value.id},"email":${JSON.stringify(currentUser.value.email)}},"image_key":${JSON.stringify(article.value.cover_image)}}`;
-      const res = await api.post('/bmanager/get_image_url', payloadStr, {
-        headers: { 'Content-Type': 'application/json' }
-      });
-      if (res.data && res.data.data && res.data.data.url) {
-        coverImageUrl.value = res.data.data.url;
-      }
-    } else {
-      coverImageUrl.value = `${api.defaults.baseURL}/image/get_image?key=${encodeURIComponent(article.value.cover_image)}`;
+    const url = await getOssImageUrl(article.value.cover_image);
+    if (url) {
+      coverImageUrl.value = url;
     }
   } catch (e) {
     console.error('Failed to load cover image:', e);
@@ -109,12 +104,9 @@ const loadInlineImages = async () => {
     if (key && !img.dataset.loaded) {
       img.dataset.loaded = 'true'; // Prevent duplicate loads
       try {
-        const payloadStr = `{"base":{"access_token":${JSON.stringify(currentUser.value.token)},"user_id":${currentUser.value.id},"email":${JSON.stringify(currentUser.value.email)}},"image_key":${JSON.stringify(key)}}`;
-        const res = await api.post('/bmanager/get_image_url', payloadStr, {
-          headers: { 'Content-Type': 'application/json' }
-        });
-        if (res.data && res.data.data && res.data.data.url) {
-          img.src = res.data.data.url;
+        const url = await getOssImageUrl(key);
+        if (url) {
+          img.src = url;
         }
       } catch (e) {
         console.error('Failed to load inline image:', e);
@@ -680,9 +672,12 @@ onUnmounted(() => {
 
 .markdown-body :deep(img) {
   max-width: 100%;
+  max-height: 500px;
+  width: auto;
+  object-fit: contain;
   border-radius: 8px;
   display: block;
-  margin: 16px 0;
+  margin: 16px auto;
 }
 
 .article-actions {

@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import api from '../api';
 import { showToast } from '../utils/toast';
 
@@ -9,25 +9,100 @@ const props = defineProps({
 
 const emit = defineEmits(['close', 'loginSuccess']);
 
-const isLogin = ref(true);
+// mode: 'login' | 'register' | 'forget'
+const mode = ref('login');
 const form = ref({
   email: '',
-  password: ''
+  password: '',
+  captcha_answer: '',
+  email_code: ''
+});
+
+const captchaData = ref({
+  id: '',
+  b64s: ''
 });
 
 const loading = ref(false);
+const codeLoading = ref(false);
 const errorMsg = ref('');
+
+const fetchCaptcha = async () => {
+  try {
+    const response = await api.post('/user/get_captcha', {});
+    const res = response.data;
+    let data = res;
+    if (res.errCode === 0 && res.data) data = res.data;
+    
+    captchaData.value = {
+      id: data.id,
+      b64s: data.b64s
+    };
+    form.value.captcha_answer = '';
+  } catch (error) {
+    console.error('Failed to fetch captcha', error);
+  }
+};
+
+watch(() => props.isVisible, (newVal) => {
+  if (newVal) {
+    fetchCaptcha();
+  }
+});
 
 const close = () => {
   emit('close');
   errorMsg.value = '';
   form.value.password = '';
+  form.value.captcha_answer = '';
+  form.value.email_code = '';
 };
 
-const toggleMode = () => {
-  isLogin.value = !isLogin.value;
+const setMode = (newMode) => {
+  mode.value = newMode;
   errorMsg.value = '';
   form.value.password = '';
+  form.value.captcha_answer = '';
+  form.value.email_code = '';
+  fetchCaptcha();
+};
+
+const handleSendCode = async () => {
+  if (!form.value.email) {
+    errorMsg.value = '邮箱不能为空';
+    return;
+  }
+  if (!form.value.captcha_answer) {
+    errorMsg.value = '图形验证码不能为空';
+    return;
+  }
+
+  codeLoading.value = true;
+  errorMsg.value = '';
+
+  try {
+    const response = await api.post('/user/send_email_code', {
+      email: form.value.email,
+      captcha_id: captchaData.value.id,
+      captcha_answer: form.value.captcha_answer
+    });
+    
+    if (response.data.errCode === 0 || !response.data.errCode) {
+      showToast('验证码发送成功，请查收邮件', 'success');
+    } else {
+      errorMsg.value = response.data.errMsg || '发送失败';
+      fetchCaptcha(); // reload captcha on error
+    }
+  } catch (error) {
+    if (error.response?.data?.errMsg) {
+      errorMsg.value = error.response.data.errMsg;
+    } else {
+      errorMsg.value = '发送失败，请稍后再试';
+    }
+    fetchCaptcha();
+  } finally {
+    codeLoading.value = false;
+  }
 };
 
 const handleSubmit = async () => {
@@ -36,21 +111,60 @@ const handleSubmit = async () => {
     return;
   }
   
+  if (mode.value === 'login' && !form.value.captcha_answer) {
+    errorMsg.value = '验证码不能为空';
+    return;
+  }
+
+  if ((mode.value === 'register' || mode.value === 'forget') && !form.value.email_code) {
+    errorMsg.value = '邮箱验证码不能为空';
+    return;
+  }
+  
   loading.value = true;
   errorMsg.value = '';
 
   try {
-    const endpoint = isLogin.value ? '/user/user_login' : '/user/user_register';
-    const response = await api.post(endpoint, {
-      email: form.value.email,
-      password: form.value.password
-    });
-    
+    let endpoint = '';
+    let payload = {};
+
+    if (mode.value === 'login') {
+      endpoint = '/user/user_login';
+      payload = {
+        email: form.value.email,
+        password: form.value.password,
+        captcha_id: captchaData.value.id,
+        captcha_answer: form.value.captcha_answer
+      };
+    } else if (mode.value === 'register') {
+      endpoint = '/user/user_register';
+      payload = {
+        email: form.value.email,
+        password: form.value.password,
+        email_code: form.value.email_code
+      };
+    } else if (mode.value === 'forget') {
+      endpoint = '/user/post_update_password';
+      payload = {
+        email: form.value.email,
+        password: form.value.password,
+        email_code: form.value.email_code
+      };
+    }
+
+    const response = await api.post(endpoint, payload);
     const res = response.data;
     
     let data = res;
     if (res.errCode === 0 && res.data) {
       data = res.data;
+    }
+
+    if (mode.value === 'forget') {
+      showToast('密码修改成功，请登录', 'success');
+      setMode('login');
+      loading.value = false;
+      return;
     }
 
     const token = data.accessToken || data.access_token;
@@ -66,21 +180,23 @@ const handleSubmit = async () => {
       localStorage.setItem('user_nickname', userNickname || '新用户');
       localStorage.setItem('user_id', userId || '');
       
-      showToast(isLogin.value ? '登录成功' : '注册成功', 'success');
+      showToast(mode.value === 'login' ? '登录成功' : '注册成功', 'success');
       emit('loginSuccess');
       close();
     } else {
        errorMsg.value = res.errMsg || '服务器响应异常';
+       if (mode.value === 'login') fetchCaptcha();
     }
 
   } catch (error) {
-    if (error.response && error.response.data && error.response.data.errMsg) {
+    if (error.response?.data?.errMsg) {
       errorMsg.value = error.response.data.errMsg;
-    } else if (error.response && error.response.data && error.response.data.message) {
+    } else if (error.response?.data?.message) {
       errorMsg.value = error.response.data.message;
     } else {
-      errorMsg.value = isLogin.value ? '登录失败，请检查邮箱或密码' : '注册失败，请稍后再试';
+      errorMsg.value = mode.value === 'login' ? '登录失败' : '操作失败';
     }
+    if (mode.value === 'login') fetchCaptcha();
   } finally {
     loading.value = false;
   }
@@ -92,7 +208,9 @@ const handleSubmit = async () => {
     <div v-if="isVisible" class="modal-overlay" @click.self="close">
       <div class="modal-card card">
         <button class="close-btn" @click="close">&times;</button>
-        <h2 class="auth-title">{{ isLogin ? '登录' : '创建账号' }}</h2>
+        <h2 class="auth-title">
+          {{ mode === 'login' ? '登录' : (mode === 'register' ? '创建账号' : '找回密码') }}
+        </h2>
         
         <form class="auth-form" @submit.prevent="handleSubmit">
           <div class="input-group">
@@ -106,11 +224,50 @@ const handleSubmit = async () => {
           </div>
           
           <div class="input-group">
-            <label>密码</label>
+            <label>图形验证码</label>
+            <div class="captcha-row">
+              <input 
+                type="text" 
+                v-model="form.captcha_answer" 
+                placeholder="输入验证码" 
+                required 
+              />
+              <img 
+                v-if="captchaData.b64s" 
+                :src="captchaData.b64s" 
+                @click="fetchCaptcha" 
+                class="captcha-img" 
+                alt="captcha" 
+              />
+            </div>
+          </div>
+
+          <div v-if="mode === 'register' || mode === 'forget'" class="input-group">
+            <label>邮箱验证码</label>
+            <div class="captcha-row">
+              <input 
+                type="text" 
+                v-model="form.email_code" 
+                placeholder="输入邮件验证码" 
+                required 
+              />
+              <button 
+                type="button" 
+                class="send-code-btn" 
+                @click="handleSendCode" 
+                :disabled="codeLoading"
+              >
+                {{ codeLoading ? '发送中...' : '发送验证码' }}
+              </button>
+            </div>
+          </div>
+          
+          <div class="input-group">
+            <label>{{ mode === 'forget' ? '新密码' : '密码' }}</label>
             <input 
               type="password" 
               v-model="form.password" 
-              placeholder="输入密码" 
+              :placeholder="mode === 'forget' ? '输入新密码' : '输入密码'" 
               required 
             />
           </div>
@@ -118,14 +275,19 @@ const handleSubmit = async () => {
           <div v-if="errorMsg" class="error-message">{{ errorMsg }}</div>
           
           <button type="submit" class="submit-btn" :disabled="loading">
-            {{ loading ? '处理中...' : (isLogin ? '登录' : '注册') }}
+            {{ loading ? '处理中...' : (mode === 'login' ? '登录' : '提交') }}
           </button>
         </form>
         
         <div class="auth-switch">
-          <span class="switch-text">{{ isLogin ? '没有账号？' : '已有账号？' }}</span>
-          <button class="switch-btn" @click="toggleMode" type="button">
-            {{ isLogin ? '立即注册' : '返回登录' }}
+          <button v-if="mode !== 'login'" class="switch-btn" @click="setMode('login')" type="button">
+            返回登录
+          </button>
+          <button v-if="mode === 'login'" class="switch-btn" @click="setMode('register')" type="button">
+            立即注册
+          </button>
+          <button v-if="mode === 'login'" class="switch-btn" @click="setMode('forget')" type="button">
+            忘记密码？
           </button>
         </div>
       </div>
@@ -225,6 +387,44 @@ const handleSubmit = async () => {
   opacity: 0.5;
 }
 
+.captcha-row {
+  display: flex;
+  gap: 8px;
+}
+
+.captcha-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.captcha-img {
+  height: 44px;
+  border-radius: 8px;
+  cursor: pointer;
+  border: 1px solid var(--glass-border);
+}
+
+.send-code-btn {
+  padding: 0 16px;
+  background: var(--glass-border);
+  border: 1px solid var(--glass-border);
+  color: var(--text-color);
+  border-radius: 8px;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.2s;
+}
+
+.send-code-btn:hover:not(:disabled) {
+  opacity: 0.8;
+}
+
+.send-code-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .error-message {
   color: #ff4d4f;
   font-size: 13px;
@@ -261,13 +461,9 @@ const handleSubmit = async () => {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 8px;
+  gap: 16px;
   font-size: 14px;
   margin-top: 16px;
-}
-
-.switch-text {
-  opacity: 0.6;
 }
 
 .switch-btn {

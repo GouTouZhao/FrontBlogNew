@@ -4,6 +4,8 @@ import { useRouter } from 'vue-router';
 import api from '../api';
 import { showToast } from '../utils/toast';
 
+import Compressor from 'compressorjs';
+
 const router = useRouter();
 
 const isEditingName = ref(false);
@@ -54,13 +56,30 @@ const handleAvatarClick = () => {
 };
 
 const handleFileChange = async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-  previewUrl.value = URL.createObjectURL(file);
+  const originalFile = event.target.files[0];
+  if (!originalFile) return;
+  previewUrl.value = URL.createObjectURL(originalFile);
   
   try {
     uploadStatus.value = 'uploading';
-    const ext = file.name.split('.').pop() || 'jpg';
+    showToast('正在处理头像...', 'info');
+
+    // 前端直接压缩转WebP
+    const file = await new Promise((resolve, reject) => {
+      new Compressor(originalFile, {
+        quality: 0.8,
+        maxWidth: 200,
+        maxHeight: 200,
+        mimeType: 'image/webp',
+        success: (result) => {
+          // Convert Blob to File object if necessary
+          resolve(new File([result], 'avatar.webp', { type: 'image/webp' }));
+        },
+        error: reject,
+      });
+    });
+
+    const ext = 'webp';
 
     // Use manual JSON to preserve int64 precision
     const payloadStr = `{"base":{"access_token":${JSON.stringify(currentUser.value.token)},"email":${JSON.stringify(currentUser.value.email)},"user_id":${currentUser.value.id}},"file_ext":${JSON.stringify(ext)}}`;
@@ -116,6 +135,7 @@ const confirmUpdateAvatar = async () => {
     ossKey.value = '';
     previewUrl.value = '';
     loadUserAvatar();
+    window.dispatchEvent(new Event('auth-updated'));
     showToast('头像更新成功', 'success');
   } catch (e) {
     console.error(e);

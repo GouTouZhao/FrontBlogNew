@@ -24,20 +24,71 @@ const isDark = ref(false);
 const isSidebarExpanded = ref(false);
 const showLoginModal = ref(false);
 
+import api from './api';
+
 const currentUser = ref({
   isLoggedIn: false,
-  nickname: '游客'
+  nickname: '游客',
+  avatarUrl: ''
 });
+
+const loadAvatar = async (token, email, userId, protoUrl) => {
+  if (!protoUrl) {
+    currentUser.value.avatarUrl = '';
+    return;
+  }
+  
+  // Check cache first
+  const cacheKey = 'avatar_cache';
+  try {
+    const cachedStr = localStorage.getItem(cacheKey);
+    if (cachedStr) {
+      const cached = JSON.parse(cachedStr);
+      // Valid for 50 minutes (3000000 ms) and protoUrl must match
+      if (cached.protoUrl === protoUrl && cached.expireAt > Date.now()) {
+        currentUser.value.avatarUrl = cached.url;
+        return;
+      }
+    }
+  } catch (e) {
+    // Ignore cache error
+  }
+
+  // Fetch new URL
+  try {
+    const payloadStr = `{"base":{"access_token":${JSON.stringify(token)},"email":${JSON.stringify(email)},"user_id":${userId}},"image_key":${JSON.stringify(protoUrl)}}`;
+    const res = await api.post('/user/get_user_photo_compre', payloadStr, {
+      headers: { 'Content-Type': 'application/json' }
+    });
+    if (res.data && res.data.data && res.data.data.url) {
+      const url = res.data.data.url;
+      currentUser.value.avatarUrl = url;
+      localStorage.setItem(cacheKey, JSON.stringify({
+        protoUrl,
+        url,
+        expireAt: Date.now() + 4.5 * 60 * 1000 // 4.5 mins, since backend token is 5 mins
+      }));
+    }
+  } catch (e) {
+    console.error('Failed to load avatar in sidebar', e);
+  }
+};
 
 const checkAuth = () => {
   const token = localStorage.getItem('access_token');
   const nickname = localStorage.getItem('user_nickname');
+  const email = localStorage.getItem('user_email');
+  const userId = localStorage.getItem('user_id');
+  const protoUrl = localStorage.getItem('user_proto_url');
+
   if (token) {
     currentUser.value.isLoggedIn = true;
     currentUser.value.nickname = nickname || '用户';
+    loadAvatar(token, email, userId, protoUrl);
   } else {
     currentUser.value.isLoggedIn = false;
     currentUser.value.nickname = '游客';
+    currentUser.value.avatarUrl = '';
   }
 };
 
@@ -196,6 +247,15 @@ const handleAuthAction = () => {
       <div v-if="isSidebarExpanded" class="sidebar-bottom">
         <div class="user-info">
           <div 
+            v-if="currentUser.avatarUrl"
+            class="avatar-image-container"
+            @click="handleUserClick"
+            style="cursor: pointer"
+          >
+            <img :src="currentUser.avatarUrl" class="sidebar-avatar-img" />
+          </div>
+          <div 
+            v-else
             class="avatar-text" 
             @click="handleUserClick"
             style="cursor: pointer"
@@ -411,6 +471,22 @@ const handleAuthAction = () => {
   font-weight: 700;
   font-size: 12px;
   text-transform: uppercase;
+}
+
+.avatar-image-container {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .user-details {

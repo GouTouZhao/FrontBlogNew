@@ -15,6 +15,7 @@ import {
   prevPage as storePrevPage, 
   nextPage as storeNextPage 
 } from '../store';
+import { getOssImageUrl } from '../utils/imageCache';
 
 const route = useRoute();
 
@@ -36,21 +37,9 @@ const loadCoverImage = async (item) => {
   if (!item.coverImage || coverImageUrls.value[item.id]) return;
   
   try {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      // Logged in: use bmanager/get_image_url for signed URL
-      const userId = localStorage.getItem('user_id') || '0';
-      const email = localStorage.getItem('user_email') || '';
-      const payloadStr = `{"base":{"access_token":${JSON.stringify(token)},"user_id":${userId},"email":${JSON.stringify(email)}},"image_key":${JSON.stringify(item.coverImage)}}`;
-      const res = await api.post('/bmanager/get_image_url', payloadStr, {
-        headers: { 'Content-Type': 'application/json' }
-      });
-      if (res.data && res.data.data && res.data.data.url) {
-        coverImageUrls.value[item.id] = res.data.data.url;
-      }
-    } else {
-      // Not logged in: use proxy endpoint
-      coverImageUrls.value[item.id] = `${api.defaults.baseURL}/image/get_image?key=${encodeURIComponent(item.coverImage)}`;
+    const url = await getOssImageUrl(item.coverImage);
+    if (url) {
+      coverImageUrls.value[item.id] = url;
     }
   } catch (e) {
     console.error('Failed to load cover image:', e);
@@ -286,14 +275,10 @@ onUnmounted(() => {
 }
 
 .post-item.has-cover {
-  border-radius: 16px;
-  border: 1px solid var(--border-color);
-  padding: 24px;
-  border-bottom: 1px solid var(--border-color);
   display: flex;
   flex-direction: row-reverse;
   align-items: center;
-  gap: 24px;
+  gap: 32px;
 }
 
 .post-item:last-child {
@@ -303,10 +288,12 @@ onUnmounted(() => {
 /* Cover Image in List */
 .post-cover-bg {
   position: relative;
-  width: 160px;
-  min-width: 160px;
+  width: 180px;
+  min-width: 180px;
   height: 120px;
   border-radius: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
   overflow: hidden;
   flex-shrink: 0;
 }

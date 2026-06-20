@@ -64,23 +64,14 @@ const parseContentToBlocks = (text) => {
   }
   return newBlocks;
 };
+import { getOssImageUrl } from '../utils/imageCache';
 
 const loadCoverImage = async () => {
   if (!coverImageKey.value) return;
   try {
-    const token = localStorage.getItem('access_token');
-    const userId = localStorage.getItem('user_id');
-    const email = localStorage.getItem('user_email');
-    if (token) {
-      const payloadStr = `{"base":{"access_token":${JSON.stringify(token)},"user_id":${userId},"email":${JSON.stringify(email)}},"image_key":${JSON.stringify(coverImageKey.value)}}`;
-      const res = await api.post('/bmanager/get_image_url', payloadStr, {
-        headers: { 'Content-Type': 'application/json' }
-      });
-      if (res.data && res.data.data && res.data.data.url) {
-        coverImageLocalUrl.value = res.data.data.url;
-      }
-    } else {
-      coverImageLocalUrl.value = `${api.defaults.baseURL}/image/get_image?key=${encodeURIComponent(coverImageKey.value)}`;
+    const url = await getOssImageUrl(coverImageKey.value);
+    if (url) {
+      coverImageLocalUrl.value = url;
     }
   } catch (e) {
     console.error('Failed to load cover image:', e);
@@ -141,9 +132,9 @@ renderer.image = (arg1, arg2, arg3) => {
     const key = href.replace('oss_key:', '');
     const localUrl = localImageCache.value[key];
     if (localUrl) {
-      return `<img src="${localUrl}" alt="${text || 'image'}" style="max-width:100%;border-radius:8px;display:block;margin:16px 0;">`;
+      return `<img src="${localUrl}" alt="${text || 'image'}" style="max-width:100%;max-height:500px;width:auto;object-fit:contain;border-radius:8px;display:block;margin:16px auto;">`;
     }
-    return `<img src="${api.defaults.baseURL}/image/get_image?key=${encodeURIComponent(key)}" alt="${text || 'image'}" style="max-width:100%;border-radius:8px;display:block;margin:16px 0;">`;
+    return `<img src="${api.defaults.baseURL}/image/get_image?key=${encodeURIComponent(key)}" alt="${text || 'image'}" style="max-width:100%;max-height:500px;width:auto;object-fit:contain;border-radius:8px;display:block;margin:16px auto;">`;
   }
   return originalImage(arg1, arg2, arg3);
 };
@@ -170,13 +161,18 @@ const handleCoverChange = async (event) => {
     let fileToUpload = file;
     
     if (file.size > 2 * 1024 * 1024) {
-      const targetSize = 1.8 * 1024 * 1024;
-      let estimatedQuality = targetSize / file.size;
-      estimatedQuality = Math.max(0.1, Math.min(estimatedQuality, 0.95));
+      // 尽力压缩到 1.8M 附近，不修改原图分辨率，使用更保守的高质量压缩比例
+      let estimatedQuality = 0.92;
+      if (file.size > 8 * 1024 * 1024) {
+        estimatedQuality = 0.85;
+      } else if (file.size > 4 * 1024 * 1024) {
+        estimatedQuality = 0.90;
+      }
+
       fileToUpload = await new Promise((resolve, reject) => {
         new Compressor(file, {
           quality: estimatedQuality,
-          maxWidth: 1920,
+          // 移除 maxWidth: 1920，保证原图分辨率不做修改
           success: resolve,
           error: reject,
         });
@@ -239,13 +235,18 @@ const handleInsertImage = () => {
 
       let fileToUpload = file;
       if (file.size > 2 * 1024 * 1024) {
-        const targetSize = 1.8 * 1024 * 1024;
-        let estimatedQuality = targetSize / file.size;
-        estimatedQuality = Math.max(0.1, Math.min(estimatedQuality, 0.95));
+        // 尽力压缩到 1.8M 附近，不修改原图分辨率，使用更保守的高质量压缩比例
+        let estimatedQuality = 0.92;
+        if (file.size > 8 * 1024 * 1024) {
+          estimatedQuality = 0.85;
+        } else if (file.size > 4 * 1024 * 1024) {
+          estimatedQuality = 0.90;
+        }
+
         fileToUpload = await new Promise((resolve, reject) => {
           new Compressor(file, {
             quality: estimatedQuality,
-            maxWidth: 1920,
+            // 移除 maxWidth: 1920，保证原图分辨率不做修改
             success: resolve,
             error: reject,
           });

@@ -4,6 +4,7 @@ import { partitions } from '../data/mock';
 import { useRouter } from 'vue-router';
 import api from '../api';
 import { showToast } from '../utils/toast';
+import { getOssImageUrl } from '../utils/imageCache';
 
 const router = useRouter();
 const recentBlogs = ref([]);
@@ -14,19 +15,9 @@ const coverImageUrls = ref({});
 const loadCoverImage = async (blog) => {
   if (!blog.cover_image || coverImageUrls.value[blog.article_id]) return;
   try {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      const userId = localStorage.getItem('user_id') || '0';
-      const email = localStorage.getItem('user_email') || '';
-      const payloadStr = `{"base":{"access_token":${JSON.stringify(token)},"user_id":${userId},"email":${JSON.stringify(email)}},"image_key":${JSON.stringify(blog.cover_image)}}`;
-      const res = await api.post('/bmanager/get_image_url', payloadStr, {
-        headers: { 'Content-Type': 'application/json' }
-      });
-      if (res.data && res.data.data && res.data.data.url) {
-        coverImageUrls.value[blog.article_id] = res.data.data.url;
-      }
-    } else {
-      coverImageUrls.value[blog.article_id] = `${api.defaults.baseURL}/image/get_image?key=${encodeURIComponent(blog.cover_image)}`;
+    const url = await getOssImageUrl(blog.cover_image);
+    if (url) {
+      coverImageUrls.value[blog.article_id] = url;
     }
   } catch (e) {
     console.error('Failed to load cover image:', e);
