@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'https://api.goutou.club',
+  baseURL: 'http://120.26.254.181:30002',
   timeout: 10000,
   withCredentials: true,
   headers: {
@@ -75,7 +75,7 @@ api.interceptors.response.use(
       try {
         // Assume backend refresh token endpoint is /user/refresh_token
         // We use a fresh axios instance to avoid interceptor loops
-        const refreshResponse = await axios.post('https://api.goutou.space/user/refresh_token', {}, {
+        const refreshResponse = await axios.post('http://120.26.254.181:30002/user/refresh_token', {}, {
           withCredentials: true
         });
         
