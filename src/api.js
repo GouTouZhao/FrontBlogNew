@@ -1,8 +1,8 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'https://api.goutou.space',
-  timeout: 5000,
+  baseURL: 'https://api.goutou.club',
+  timeout: 10000,
   withCredentials: true,
   headers: {
     'Content-Type': 'application/json'
