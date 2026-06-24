@@ -1,11 +1,13 @@
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '../api';
 import { showToast } from '../utils/toast';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import Compressor from 'compressorjs';
+import { currentPartition } from '../store';
+import { getOssImageUrl } from '../utils/imageCache';
 
 const route = useRoute();
 const router = useRouter();
@@ -44,7 +46,11 @@ const isOwner = () => {
   return String(article.value.author_id) === String(currentUser.value.id);
 };
 
-import { getOssImageUrl } from '../utils/imageCache';
+const isAdmin = computed(() => {
+  return currentUser.value && currentUser.value.email === '2460607806@qq.com';
+});
+
+
 
 const loadCoverImage = async () => {
   if (!article.value || !article.value.cover_image) return;
@@ -66,6 +72,13 @@ const fetchArticleDetails = async () => {
       const payload = res.data.data || res.data;
       article.value = payload.article || {};
       author.value = payload.user_info || null;
+      loadAuthorAvatar();
+      
+      let cat = article.value.category_id;
+      if (cat === 'Tech') cat = 'technology';
+      if (cat) {
+        currentPartition.value = cat;
+      }
       
       // Load cover image
       loadCoverImage();
@@ -145,10 +158,15 @@ const fetchComments = async (reset = false) => {
         c.showSons = false;
         c.fetchingSons = false;
         c.avatar_url = '';
-        loadAvatar(c);
       });
 
+      const startIndex = comments.value.length;
       comments.value = [...comments.value, ...list];
+      
+      for (let i = startIndex; i < comments.value.length; i++) {
+        loadAvatar(comments.value[i]);
+      }
+
       if (comments.value.length >= total) {
         hasMoreComments.value = false;
       } else {
@@ -162,43 +180,33 @@ const fetchComments = async (reset = false) => {
   }
 };
 
+const authorAvatarUrl = ref('');
+
+const loadAuthorAvatar = async () => {
+  if (!author.value || !author.value.proto_url) return;
+  try {
+    const url = await getOssImageUrl(author.value.proto_url);
+    if (url) {
+      authorAvatarUrl.value = url;
+    }
+  } catch (e) {
+    console.error('Failed to load author avatar', e);
+  }
+};
+
 const loadAvatar = async (comment) => {
-  if (!comment.user_info) return;
-  if (!comment.user_info.proto_url) {
+  if (!comment.user_info || !comment.user_info.proto_url) {
     comment.avatar_url = null;
     return;
   }
   
-  if (currentUser.value) {
-    let retries = 3;
-    while (retries > 0) {
-      try {
-        const payloadStr = `{"base":{"access_token":${JSON.stringify(currentUser.value.token)},"email":${JSON.stringify(currentUser.value.email)},"user_id":${currentUser.value.id}},"image_key":${JSON.stringify(comment.user_info.proto_url)}}`;
-        const res = await api.post('/user/get_user_photo_compre', payloadStr, {
-          headers: { 'Content-Type': 'application/json' }
-        });
-        if (res.data && res.data.data && res.data.data.url) {
-          comment.avatar_url = res.data.data.url;
-          return;
-        }
-        retries--;
-      } catch (e) {
-        retries--;
-        if (retries === 0) console.error('Failed to load avatar', e);
-      }
+  try {
+    const url = await getOssImageUrl(comment.user_info.proto_url);
+    if (url) {
+      comment.avatar_url = url;
     }
-  } else {
-    try {
-      const res = await api.get('/image/get_avatar_thumbnail', {
-        params: { image_key: comment.user_info.proto_url },
-        responseType: 'blob'
-      });
-      if (res.data) {
-        comment.avatar_url = URL.createObjectURL(res.data);
-      }
-    } catch (e) {
-      console.error('Failed to load avatar blob', e);
-    }
+  } catch (e) {
+    console.error('Failed to load comment avatar', e);
   }
 };
 
@@ -261,10 +269,18 @@ marked.use({ renderer, breaks: true });
 const deleteForum = async () => {
   if (!confirm('确定要删除这篇帖子吗？该操作不可恢复！')) return;
   try {
-    const payloadStr = `{"article_id":${JSON.stringify(article.value.article_id)},"user_id":${currentUser.value.id}}`;
-    const res = await api.post('/bmanager/delete_forum', payloadStr, {
-      headers: { 'Content-Type': 'application/json', 'x-token': currentUser.value.token }
-    });
+    let res;
+    if (isAdmin.value && article.value.category_id !== 'forum') {
+      const payloadStr = `{"base":{"access_token":${JSON.stringify(currentUser.value.token)},"user_id":${currentUser.value.id},"email":${JSON.stringify(currentUser.value.email)}},"article_id":${JSON.stringify(article.value.article_id)}}`;
+      res = await api.post('/admin/delete_blog', payloadStr, {
+        headers: { 'Content-Type': 'application/json' }
+      });
+    } else {
+      const payloadStr = `{"article_id":${JSON.stringify(article.value.article_id)},"user_id":${currentUser.value.id}}`;
+      res = await api.post('/bmanager/delete_forum', payloadStr, {
+        headers: { 'Content-Type': 'application/json', 'x-token': currentUser.value.token }
+      });
+    }
     if (res.data && res.data.errCode === 0) {
       showToast('删除成功', 'success');
       router.push('/forum');
@@ -282,8 +298,8 @@ const deleteForum = async () => {
 const submitComment = async (replyToComment = null) => {
   let content = commentContent.value;
   let isReply = false;
-  let rootId = 0;
-  let replyToUserId = 0;
+  let rootId = "0";
+  let replyToUserId = "0";
 
   if (replyToComment) {
     content = replyToComment.replyContent;
@@ -292,8 +308,8 @@ const submitComment = async (replyToComment = null) => {
       return;
     }
     isReply = true;
-    rootId = parseInt(replyToComment.id);
-    replyToUserId = parseInt(replyToComment.user_info.user_id);
+    rootId = String(replyToComment.id);
+    replyToUserId = String(replyToComment.user_info.user_id);
   } else {
     if (!content.trim()) {
       showToast('评论内容不能为空', 'warning');
@@ -321,6 +337,7 @@ const submitComment = async (replyToComment = null) => {
     if (replyToComment) {
       replyToComment.replyContent = '';
       replyToComment.replying = false;
+      replyToComment.has_children = true;
       fetchSonComments(replyToComment, true);
     } else {
       commentContent.value = '';
@@ -339,8 +356,8 @@ const deleteComment = async (commentId, parentComment = null) => {
   if (!confirm('确定删除该评论吗？')) return;
   try {
     const res = await api.post('/bmanager/delete_comment', {
-      comment_id: parseInt(commentId),
-      user_id: parseInt(currentUser.value.id)
+      comment_id: String(commentId),
+      user_id: String(currentUser.value.id)
     });
     if (res.data && res.data.errCode === 0) {
       showToast('评论已删除', 'success');
@@ -370,10 +387,11 @@ const fetchSonComments = async (comment, reset = false) => {
     comment.hasMoreSons = true;
   }
 
+  comment.showSons = true;
+
   if (!comment.hasMoreSons || comment.fetchingSons) return;
 
   comment.fetchingSons = true;
-  comment.showSons = true;
   
   try {
     const res = await api.post('/static/get_comment_son_list', {
@@ -390,10 +408,15 @@ const fetchSonComments = async (comment, reset = false) => {
       
       list.forEach(son => {
         son.avatar_url = '';
-        loadAvatar(son);
       });
 
+      const startIndex = comment.sonList.length;
       comment.sonList = [...comment.sonList, ...list];
+      
+      for (let i = startIndex; i < comment.sonList.length; i++) {
+        loadAvatar(comment.sonList[i]);
+      }
+
       if (comment.sonList.length >= total) {
         comment.hasMoreSons = false;
       } else {
@@ -420,6 +443,18 @@ onMounted(() => {
   window.addEventListener('scroll', handleScroll);
 });
 
+watch(() => route.params.id, (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    isLoading.value = true;
+    article.value = null;
+    author.value = null;
+    coverImageUrl.value = '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    fetchArticleDetails();
+    fetchComments(true);
+  }
+});
+
 onUnmounted(() => {
   if (viewTimer) clearTimeout(viewTimer);
   window.removeEventListener('scroll', handleScroll);
@@ -440,16 +475,24 @@ onUnmounted(() => {
           <div class="header-cover-fade"></div>
         </div>
         <h1 class="title">{{ article.title }}</h1>
-        <div class="meta">
-          <span v-if="author" class="author">作者: {{ author.nick_name }}</span>
-          <span class="views">浏览量: {{ article.view_count }}</span>
-          <span class="time" v-if="article.updated_at">最后更新: {{ new Date(article.updated_at * 1000).toLocaleString() }}</span>
+        <div class="author-info-row" v-if="author">
+           <div class="author-avatar clickable" @click="viewLargeAvatar(author)">
+             <img v-if="authorAvatarUrl" :src="authorAvatarUrl" alt="author avatar" />
+             <div v-else class="default-avatar">{{ author.nick_name?.charAt(0) || '匿' }}</div>
+           </div>
+           <div class="author-details">
+             <span class="author-name">{{ author.nick_name || '匿名作者' }}</span>
+             <div class="meta">
+               <span class="views">浏览量: {{ article.view_count }}</span>
+               <span class="time" v-if="article.updated_at">最后更新: {{ new Date(article.updated_at * 1000).toLocaleString() }}</span>
+             </div>
+           </div>
         </div>
       </div>
 
       <div class="markdown-body" v-html="renderedContent(article.content)"></div>
 
-      <div class="article-actions" v-if="isOwner()">
+      <div class="article-actions" v-if="isOwner() || isAdmin">
         <button class="edit-btn" @click="router.push(`/post?edit_id=${article.article_id}`)">修改</button>
         <button class="delete-btn" @click="deleteForum">删除</button>
       </div>
@@ -495,7 +538,8 @@ onUnmounted(() => {
             
             <div class="comment-actions">
               <button class="action-btn" @click="comment.replying = !comment.replying">回复</button>
-              <button class="action-btn" v-if="comment.has_children" @click="fetchSonComments(comment)">查看回复</button>
+              <button class="action-btn" v-if="(comment.has_children || (comment.sonList && comment.sonList.length > 0)) && !comment.showSons" @click="fetchSonComments(comment)">查看回复</button>
+              <button class="action-btn" v-if="comment.showSons" @click="comment.showSons = false">收起回复</button>
               <button class="action-btn delete" v-if="currentUser && String(comment.user_info?.user_id) === String(currentUser.id)" @click="deleteComment(comment.id)">删除</button>
             </div>
 
@@ -1131,4 +1175,54 @@ textarea:focus {
   object-fit: contain;
 }
 
+</style>
+
+<style scoped>
+.author-info-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+  margin-bottom: 8px;
+}
+
+.author-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  flex-shrink: 0;
+}
+
+.author-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.author-avatar .default-avatar {
+  width: 100%;
+  height: 100%;
+  background: var(--text-color);
+  color: var(--bg-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 1.2rem;
+}
+
+.author-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.author-name {
+  font-weight: 700;
+  font-size: 1.1rem;
+}
 </style>

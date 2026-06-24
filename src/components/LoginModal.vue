@@ -172,6 +172,7 @@ const handleSubmit = async () => {
     const userEmail = data.email;
     const userId = data.userId || data.user_id;
     const userNickname = data.nickname;
+    const protoUrl = data.protoUrl || data.proto_url || '';
 
     if (token) {
       localStorage.setItem('access_token', token);
@@ -179,6 +180,7 @@ const handleSubmit = async () => {
       localStorage.setItem('user_email', userEmail || form.value.email);
       localStorage.setItem('user_nickname', userNickname || '新用户');
       localStorage.setItem('user_id', userId || '');
+      localStorage.setItem('user_proto_url', protoUrl);
       localStorage.removeItem('avatar_cache');
       
       showToast(mode.value === 'login' ? '登录成功' : '注册成功', 'success');

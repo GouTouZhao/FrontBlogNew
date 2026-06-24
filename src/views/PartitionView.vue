@@ -419,7 +419,7 @@ onUnmounted(() => {
   }
   
   .post-item.has-cover {
-    flex-direction: column;
+    flex-direction: column-reverse;
     align-items: flex-start;
   }
   

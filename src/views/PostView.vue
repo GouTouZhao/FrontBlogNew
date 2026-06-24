@@ -13,7 +13,10 @@ const router = useRouter();
 
 const title = ref('');
 const isSubmitting = ref(false);
-const activeTab = ref('edit'); 
+const activeTab = ref('edit');
+
+const isAdmin = computed(() => localStorage.getItem('user_email') === '2460607806@qq.com');
+const selectedCategory = ref('forum'); 
 
 const isEditingPost = computed(() => !!route.query.edit_id);
 const editId = computed(() => route.query.edit_id);
@@ -91,6 +94,9 @@ const fetchEditPost = async () => {
         if (coverImageKey.value) {
           loadCoverImage();
         }
+        
+        let cat = payload.article.category_id;
+        selectedCategory.value = cat || 'forum';
       }
     }
   } catch (err) {
@@ -111,7 +117,11 @@ onMounted(() => {
     fetchEditPost();
   } else {
     const p = route.query.partition;
-    if (p) currentPartition.value = p;
+    if (p && isAdmin.value) {
+      selectedCategory.value = p;
+    } else {
+      selectedCategory.value = 'forum';
+    }
   }
 });
 
@@ -427,16 +437,31 @@ const submitPost = async () => {
   try {
     let res;
     if (isEditingPost.value) {
-      const payloadStr = `{"article_id":${JSON.stringify(editId.value)},"title":${JSON.stringify(title.value)},"content":${JSON.stringify(finalContent)},"cover_image":${JSON.stringify(coverImageKey.value)},"user_id":${userId}}`;
-      res = await api.post('/bmanager/update_forum', payloadStr, {
-        headers: { 'Content-Type': 'application/json', 'x-token': token }
-      });
+      if (isAdmin.value && selectedCategory.value !== 'forum') {
+        const catId = selectedCategory.value;
+        const payloadStr = `{"base":{"access_token":${JSON.stringify(token)},"user_id":${userId},"email":${JSON.stringify(email)}},"article_id":${JSON.stringify(editId.value)},"title":${JSON.stringify(title.value)},"content":${JSON.stringify(finalContent)},"category_id":${JSON.stringify(catId)},"cover_image":${JSON.stringify(coverImageKey.value)}}`;
+        res = await api.post('/admin/post_blog_change', payloadStr, {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } else {
+        const payloadStr = `{"article_id":${JSON.stringify(editId.value)},"title":${JSON.stringify(title.value)},"content":${JSON.stringify(finalContent)},"cover_image":${JSON.stringify(coverImageKey.value)},"user_id":${userId}}`;
+        res = await api.post('/bmanager/update_forum', payloadStr, {
+          headers: { 'Content-Type': 'application/json', 'x-token': token }
+        });
+      }
     } else {
-      const partitionName = currentPartition.value === 'home' ? 'Tech' : currentPartition.value;
-      const payloadStr = `{"author_id":${userId},"title":${JSON.stringify(title.value)},"content":${JSON.stringify(finalContent)},"type_name":${JSON.stringify(partitionName)},"cover_image":${JSON.stringify(coverImageKey.value)}}`;
-      res = await api.post('/bmanager/push_forum_new', payloadStr, {
-        headers: { 'Content-Type': 'application/json' }
-      });
+      if (isAdmin.value && selectedCategory.value !== 'forum') {
+        const catId = selectedCategory.value;
+        const payloadStr = `{"base":{"access_token":${JSON.stringify(token)},"user_id":${userId},"email":${JSON.stringify(email)}},"title":${JSON.stringify(title.value)},"content":${JSON.stringify(finalContent)},"category_id":${JSON.stringify(catId)},"cover_image":${JSON.stringify(coverImageKey.value)}}`;
+        res = await api.post('/admin/push_blog_new', payloadStr, {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      } else {
+        const payloadStr = `{"author_id":${userId},"title":${JSON.stringify(title.value)},"content":${JSON.stringify(finalContent)},"type_name":"forum","cover_image":${JSON.stringify(coverImageKey.value)}}`;
+        res = await api.post('/bmanager/push_forum_new', payloadStr, {
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     if (res.data && res.data.errCode === 0) {
@@ -465,6 +490,14 @@ const submitPost = async () => {
       </div>
 
       <div class="form-group title-group">
+        <select v-if="isAdmin" v-model="selectedCategory" class="category-select">
+          <option value="photography">摄影</option>
+          <option value="technology">技术</option>
+          <option value="life">生活</option>
+          <option value="forum">讨论大厅(论坛)</option>
+        </select>
+        <span v-else class="category-fixed">发布至：讨论大厅</span>
+
         <input 
           type="text" 
           v-model="title" 
@@ -634,6 +667,33 @@ const submitPost = async () => {
   display: flex;
   gap: 16px;
   align-items: center;
+}
+
+.category-select {
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-color);
+  color: var(--text-color);
+  font-size: 1rem;
+  font-weight: 600;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.3s;
+}
+
+.category-select:focus {
+  border-color: var(--text-color);
+}
+
+.category-fixed {
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: rgba(128, 128, 128, 0.1);
+  color: var(--text-color);
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .title-input {

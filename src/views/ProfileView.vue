@@ -29,6 +29,18 @@ const checkAuth = () => {
 const currentAvatarUrl = ref('');
 const loadUserAvatar = async () => {
   if (currentUser.value && currentUser.value.protoUrl) {
+    const cacheKey = 'avatar_cache';
+    try {
+      const cachedStr = localStorage.getItem(cacheKey);
+      if (cachedStr) {
+        const cached = JSON.parse(cachedStr);
+        if (cached.protoUrl === currentUser.value.protoUrl && cached.expireAt > Date.now()) {
+          currentAvatarUrl.value = cached.url;
+          return;
+        }
+      }
+    } catch (e) {}
+
     try {
       // Use manual JSON to preserve int64 precision for user_id
       const payloadStr = `{"base":{"access_token":${JSON.stringify(currentUser.value.token)},"email":${JSON.stringify(currentUser.value.email)},"user_id":${currentUser.value.id}},"image_key":${JSON.stringify(currentUser.value.protoUrl)}}`;
@@ -37,6 +49,11 @@ const loadUserAvatar = async () => {
       });
       if (res.data && res.data.data && res.data.data.url) {
         currentAvatarUrl.value = res.data.data.url;
+        localStorage.setItem(cacheKey, JSON.stringify({
+          protoUrl: currentUser.value.protoUrl,
+          url: res.data.data.url,
+          expireAt: Date.now() + 4.5 * 60 * 1000
+        }));
       }
     } catch (e) {
       console.error('Failed to load avatar', e);
@@ -134,6 +151,7 @@ const confirmUpdateAvatar = async () => {
     uploadStatus.value = '';
     ossKey.value = '';
     previewUrl.value = '';
+    localStorage.removeItem('avatar_cache');
     loadUserAvatar();
     window.dispatchEvent(new Event('auth-updated'));
     showToast('头像更新成功', 'success');
@@ -151,6 +169,11 @@ const handleEditName = () => {
 const saveName = async () => {
   if (!editingNameValue.value.trim()) {
     showToast('名称不能为空', 'warning');
+    return;
+  }
+
+  if (editingNameValue.value.length > 16) {
+    showToast('名称不能超过 16 个字符', 'warning');
     return;
   }
   
