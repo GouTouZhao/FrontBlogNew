@@ -10,7 +10,7 @@
   --blur-amount: 12px;
 }
 
-:root.dark {
+.dark {
   --bg-color: #000000;
   --text-color: #ffffff;
   --sidebar-bg: rgba(0, 0, 0, 0.7);
@@ -29,9 +29,8 @@
 }
 
 body {
-  background-color: var(--bg-color);
-  color: var(--text-color);
-  transition: background-color 0.5s ease, color 0.5s ease;
+  margin: 0;
+  padding: 0;
   overflow-x: hidden;
   font-size: 16px;
   line-height: 1.6;
@@ -80,6 +79,9 @@ a {
 .app-container {
   display: flex;
   min-height: 100vh;
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  transition: background-color 0.5s ease, color 0.5s ease;
 }
 
 .main-content {
@@ -89,7 +91,7 @@ a {
   padding: 40px;
 }
 
-.sidebar.expanded ~ .main-content {
+.sidebar.expanded~.main-content {
   margin-left: 260px;
 }
 
@@ -108,9 +110,17 @@ a {
 }
 
 /* Delay modifiers for sequential reveal */
-.reveal.delay-100 { transition-delay: 100ms; }
-.reveal.delay-200 { transition-delay: 200ms; }
-.reveal.delay-300 { transition-delay: 300ms; }
+.reveal.delay-100 {
+  transition-delay: 100ms;
+}
+
+.reveal.delay-200 {
+  transition-delay: 200ms;
+}
+
+.reveal.delay-300 {
+  transition-delay: 300ms;
+}
 
 /* Cards */
 .card {
@@ -129,12 +139,27 @@ a {
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
 }
 
-:root.dark .card:hover {
+.dark .card:hover {
   box-shadow: 0 12px 40px rgba(255, 255, 255, 0.1);
 }
 
 @media (max-width: 768px) {
-  .sidebar.expanded ~ .main-content {
+  .sidebar.expanded~.main-content {
     margin-left: 60px;
   }
+}
+
+/* Dark Mode specific element styles */
+.dark .inverted-card {
+  background: #ffffff;
+  color: #000000;
+  box-shadow: 0 20px 40px rgba(255, 255, 255, 0.05);
+}
+
+.dark .inverted-card:hover {
+  box-shadow: 0 30px 60px rgba(255, 255, 255, 0.1);
+}
+
+.dark .comment-item {
+  background: rgba(255, 255, 255, 0.05);
 }

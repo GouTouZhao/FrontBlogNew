@@ -179,6 +179,7 @@ const handleSubmit = async () => {
       localStorage.setItem('user_email', userEmail || form.value.email);
       localStorage.setItem('user_nickname', userNickname || '新用户');
       localStorage.setItem('user_id', userId || '');
+      localStorage.removeItem('avatar_cache');
       
       showToast(mode.value === 'login' ? '登录成功' : '注册成功', 'success');
       emit('loginSuccess');

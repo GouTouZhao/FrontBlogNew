@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, nextTick } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { partitions } from './data/mock';
 import { 
@@ -98,7 +98,6 @@ onMounted(() => {
   window.addEventListener('auth-updated', checkAuth);
 });
 
-import { onUnmounted } from 'vue';
 onUnmounted(() => {
   window.removeEventListener('auth-expired', handleAuthExpired);
   window.removeEventListener('auth-updated', checkAuth);
@@ -111,7 +110,6 @@ const handleAuthExpired = () => {
 };
 
 // We can listen to route changes to update auth status in case they just logged in
-import { watch } from 'vue';
 watch(() => route.path, () => {
   checkAuth();
   if (route.name !== 'partition' && route.name !== 'post' && route.name !== 'article') {
@@ -121,11 +119,6 @@ watch(() => route.path, () => {
 
 const toggleTheme = () => {
   isDark.value = !isDark.value;
-  if (isDark.value) {
-    document.documentElement.classList.add('dark');
-  } else {
-    document.documentElement.classList.remove('dark');
-  }
 };
 
 const toggleSidebar = () => {
@@ -178,6 +171,8 @@ const handleAuthAction = () => {
     localStorage.removeItem('user_email');
     localStorage.removeItem('user_nickname');
     localStorage.removeItem('user_id');
+    localStorage.removeItem('user_proto_url');
+    localStorage.removeItem('avatar_cache');
     checkAuth();
     showToast('已退出登录', 'info');
     if (route.path === '/profile') {
@@ -191,7 +186,7 @@ const handleAuthAction = () => {
 </script>
 
 <template>
-  <div class="app-container">
+  <div class="app-container" :class="{ 'dark': isDark }">
     <ToastManager />
     <LoginModal :isVisible="showLoginModal" @close="showLoginModal = false" @loginSuccess="checkAuth" />
     

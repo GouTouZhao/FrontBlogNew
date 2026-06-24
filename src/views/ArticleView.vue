@@ -627,9 +627,6 @@ onUnmounted(() => {
   background: linear-gradient(to right, transparent 10%, var(--bg-color) 70%);
 }
 
-:global(.dark) .header-cover-fade {
-  background: linear-gradient(to right, transparent 10%, var(--bg-color) 70%);
-}
 
 .title {
   position: relative;
@@ -849,9 +846,6 @@ textarea:focus {
   flex-grow: 1;
 }
 
-.dark .comment-item {
-  background: rgba(255, 255, 255, 0.05);
-}
 
 .comment-top {
   display: flex;

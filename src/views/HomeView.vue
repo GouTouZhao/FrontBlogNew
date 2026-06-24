@@ -86,10 +86,9 @@ onUnmounted(() => {
           <br/>
           <span class="name-highlight">GouTou</span>
         </h1>
-        <p class="reveal delay-200 subtitle">SYSUer / 创作者 / 探索者</p>
+        <p class="reveal delay-200 subtitle"></p>
         <p class="reveal delay-300 description">
-          欢迎来到我的数字花园。在这里，我记录生活点滴、分享创意，以及对这个世界的独特见解。
-          希望能与你一起，在探索未知中发现美好。
+          欢迎来到我的博客。在这里，我会记录我折腾过的无用的技术，以及分享一点点生活。
         </p>
       </div>
       <div class="hero-visual reveal delay-400">
@@ -143,7 +142,7 @@ onUnmounted(() => {
         <div v-if="recentBlogs.length === 0" class="thought-item acrylic-panel">
           <div class="thought-inner">
             <div class="thought-meta">寄语</div>
-            <p class="thought-text">"极简不仅仅是黑白与空无，而是把最重要的东西，用最清晰的方式表达出来。"</p>
+            <p class="thought-text">"暂无新帖。"</p>
           </div>
         </div>
       </div>
@@ -312,16 +311,7 @@ onUnmounted(() => {
   box-shadow: 0 30px 60px rgba(0, 0, 0, 0.2);
 }
 
-/* Dark Mode Inverted Card: White card on dark bg */
-:global(.dark) .inverted-card {
-  background: #ffffff;
-  color: #000000;
-  box-shadow: 0 20px 40px rgba(255, 255, 255, 0.05);
-}
 
-:global(.dark) .inverted-card:hover {
-  box-shadow: 0 30px 60px rgba(255, 255, 255, 0.1);
-}
 
 .card-content h3 {
   font-size: 1.75rem;
@@ -402,9 +392,6 @@ onUnmounted(() => {
   display: none;
 }
 
-:global(.dark) .thought-cover-fade {
-  display: none;
-}
 
 .thought-inner {
   position: relative;

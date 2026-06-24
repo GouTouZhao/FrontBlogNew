@@ -309,9 +309,6 @@ onUnmounted(() => {
   display: none;
 }
 
-:global(.dark) .post-cover-fade {
-  display: none;
-}
 
 .post-inner {
   position: relative;
