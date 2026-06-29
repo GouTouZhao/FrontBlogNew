@@ -220,6 +220,8 @@ const handleSubmit = async () => {
             <label>邮箱</label>
             <input 
               type="email" 
+              name="email"
+              autocomplete="username"
               v-model="form.email" 
               placeholder="输入您的邮箱" 
               required 
@@ -231,6 +233,8 @@ const handleSubmit = async () => {
             <div class="captcha-row">
               <input 
                 type="text" 
+                name="captcha"
+                autocomplete="off"
                 v-model="form.captcha_answer" 
                 placeholder="输入验证码" 
                 required 
@@ -250,6 +254,8 @@ const handleSubmit = async () => {
             <div class="captcha-row">
               <input 
                 type="text" 
+                name="email_code"
+                autocomplete="off"
                 v-model="form.email_code" 
                 placeholder="输入邮件验证码" 
                 required 
@@ -269,6 +275,8 @@ const handleSubmit = async () => {
             <label>{{ mode === 'forget' ? '新密码' : '密码' }}</label>
             <input 
               type="password" 
+              name="password"
+              :autocomplete="mode === 'login' ? 'current-password' : 'new-password'"
               v-model="form.password" 
               :placeholder="mode === 'forget' ? '输入新密码' : '输入密码'" 
               required 
@@ -405,6 +413,7 @@ const handleSubmit = async () => {
   border-radius: 8px;
   cursor: pointer;
   border: 1px solid var(--glass-border);
+  background-color: #ffffff;
 }
 
 .send-code-btn {

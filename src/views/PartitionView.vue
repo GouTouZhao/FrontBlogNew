@@ -290,7 +290,8 @@ onUnmounted(() => {
   position: relative;
   width: 180px;
   min-width: 180px;
-  height: 120px;
+  aspect-ratio: 16 / 9;
+  height: auto;
   border-radius: 12px;
   border: 1px solid var(--border-color);
   box-shadow: 0 4px 12px rgba(0,0,0,0.05);
@@ -421,12 +422,24 @@ onUnmounted(() => {
   .post-item.has-cover {
     flex-direction: column-reverse;
     align-items: flex-start;
+    gap: 12px;
+    padding-bottom: 24px;
+  }
+  .post-item.has-cover .post-inner {
+    padding-top: 0;
   }
   
+  .post-inner {
+    padding: 16px;
+  }
+  .post-title {
+    font-size: 1.25rem;
+  }
   .post-cover-bg {
     width: 100%;
     max-width: 100%;
-    height: 200px;
+    aspect-ratio: 2.5 / 1;
+    height: auto;
   }
 }
 </style>

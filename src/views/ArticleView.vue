@@ -468,12 +468,8 @@ onUnmounted(() => {
     <div v-else class="article-content">
       <button class="back-btn" @click="router.back()">返回</button>
       
-      <!-- Article Header with Cover Image -->
-      <div class="article-header" :class="{ 'has-cover': coverImageUrl }">
-        <div v-if="coverImageUrl" class="header-cover-bg">
-          <img :src="coverImageUrl" alt="" />
-          <div class="header-cover-fade"></div>
-        </div>
+      <!-- Article Header -->
+      <div class="article-header">
         <h1 class="title">{{ article.title }}</h1>
         <div class="author-info-row" v-if="author">
            <div class="author-avatar clickable" @click="viewLargeAvatar(author)">
@@ -488,6 +484,11 @@ onUnmounted(() => {
              </div>
            </div>
         </div>
+      </div>
+
+      <!-- Article Cover Image Below Header -->
+      <div class="article-cover-image" v-if="coverImageUrl">
+        <img :src="coverImageUrl" alt="cover image" />
       </div>
 
       <div class="markdown-body" v-html="renderedContent(article.content)"></div>
@@ -630,67 +631,19 @@ onUnmounted(() => {
   background: var(--border-color);
 }
 
-/* Article Header with Cover */
+/* Article Header */
 .article-header {
-  position: relative;
   margin-bottom: 30px;
-  overflow: hidden;
-  border-radius: 16px;
 }
-
-.article-header.has-cover {
-  padding: 30px 24px;
-  min-height: 120px;
-}
-
-.header-cover-bg {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  max-width: 70%;
-  z-index: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.header-cover-bg img {
-  height: 100%;
-  width: auto;
-  object-fit: cover;
-  display: block;
-  min-width: 120px;
-}
-
-.header-cover-fade {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(to right, transparent 10%, var(--bg-color) 70%);
-}
-
 
 .title {
-  position: relative;
-  z-index: 1;
   font-size: 2.5rem;
   font-weight: 800;
   margin-bottom: 16px;
   line-height: 1.2;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.article-header:not(.has-cover) .title {
-  white-space: normal;
 }
 
 .meta {
-  position: relative;
-  z-index: 1;
   display: flex;
   gap: 16px;
   font-size: 0.9rem;
@@ -702,6 +655,20 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
+.article-cover-image {
+  margin-bottom: 30px;
+}
+
+.article-cover-image img {
+  max-width: 100%;
+  max-height: 500px;
+  width: auto;
+  object-fit: contain;
+  border-radius: 8px;
+  display: block;
+  margin: 0 auto;
+}
+
 .markdown-body {
   font-size: 1.1rem;
   line-height: 1.8;
@@ -709,6 +676,15 @@ onUnmounted(() => {
   word-wrap: break-word;
   overflow-wrap: anywhere;
   word-break: break-all;
+  max-width: 100%;
+  overflow-x: hidden;
+  box-sizing: border-box;
+}
+
+.markdown-body :deep(pre), .markdown-body :deep(code) {
+  max-width: 100%;
+  overflow-x: auto;
+  box-sizing: border-box;
 }
 
 .markdown-body :deep(img) {
@@ -1224,5 +1200,10 @@ textarea:focus {
 .author-name {
   font-weight: 700;
   font-size: 1.1rem;
+}
+@media (max-width: 768px) {
+  .title {
+    font-size: 1.8rem;
+  }
 }
 </style>

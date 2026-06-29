@@ -283,8 +283,14 @@ onUnmounted(() => {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: 32px;
+}
+
+@media (max-width: 1200px) {
+  .grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .inverted-card {
@@ -375,7 +381,8 @@ onUnmounted(() => {
   position: relative;
   width: 160px;
   min-width: 160px;
-  height: 120px;
+  aspect-ratio: 16 / 9;
+  height: auto;
   border-radius: 12px;
   overflow: hidden;
   flex-shrink: 0;
@@ -467,7 +474,25 @@ onUnmounted(() => {
   }
 
   .inverted-card {
-    padding: 30px;
+    padding: 16px 20px;
+    min-height: auto;
+  }
+
+  .card-content h3 {
+    font-size: 1.1rem;
+    margin-bottom: 4px;
+  }
+  
+  .card-content p {
+    font-size: 0.85rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .card-arrow {
+    font-size: 1.5rem;
   }
 
   .thought-text {
@@ -475,18 +500,23 @@ onUnmounted(() => {
   }
   
   .thought-inner {
-    padding: 30px;
+    padding: 16px;
   }
   
   .thought-item.has-cover {
     flex-direction: column-reverse;
     align-items: flex-start;
+    gap: 12px;
+  }
+  .thought-item.has-cover .thought-inner {
+    padding-top: 0;
   }
   
   .thought-cover-bg {
     width: 100%;
     max-width: 100%;
-    height: 200px;
+    aspect-ratio: 2.5 / 1;
+    height: auto;
   }
 }
 </style>
