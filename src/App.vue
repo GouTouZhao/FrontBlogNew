@@ -15,6 +15,7 @@ import {
 
 import ToastManager from './components/ToastManager.vue';
 import LoginModal from './components/LoginModal.vue';
+import ConfirmModal from './components/ConfirmModal.vue';
 import { showToast } from './utils/toast';
 
 const router = useRouter();
@@ -188,6 +189,7 @@ const handleAuthAction = () => {
 <template>
   <div class="app-container" :class="{ 'dark': isDark }">
     <ToastManager />
+    <ConfirmModal />
     <LoginModal :isVisible="showLoginModal" @close="showLoginModal = false" @loginSuccess="checkAuth" />
     
     <aside class="sidebar" :class="{ 'expanded': isSidebarExpanded, 'collapsed': !isSidebarExpanded }">

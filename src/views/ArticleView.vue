@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import api from '../api';
 import { showToast } from '../utils/toast';
+import { showConfirm } from '../utils/confirm';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import Compressor from 'compressorjs';
@@ -267,7 +268,8 @@ renderer.image = (arg1, arg2, arg3) => {
 marked.use({ renderer, breaks: true });
 
 const deleteForum = async () => {
-  if (!confirm('确定要删除这篇帖子吗？该操作不可恢复！')) return;
+  const confirmed = await showConfirm('确定要删除这篇帖子吗？该操作不可恢复！');
+  if (!confirmed) return;
   try {
     let res;
     if (isAdmin.value && article.value.category_id !== 'forum') {
@@ -353,11 +355,12 @@ const submitComment = async (replyToComment = null) => {
 };
 
 const deleteComment = async (commentId, parentComment = null) => {
-  if (!confirm('确定删除该评论吗？')) return;
+  const confirmed = await showConfirm('确定删除该评论吗？');
+  if (!confirmed) return;
   try {
-    const res = await api.post('/bmanager/delete_comment', {
-      comment_id: String(commentId),
-      user_id: String(currentUser.value.id)
+    const payloadStr = `{"comment_id":${JSON.stringify(String(commentId))},"user_id":${currentUser.value.id}}`;
+    const res = await api.post('/bmanager/delete_comment', payloadStr, {
+      headers: { 'Content-Type': 'application/json' }
     });
     if (res.data && res.data.errCode === 0) {
       showToast('评论已删除', 'success');
