@@ -1,0 +1,362 @@
+<script setup>
+import { ref, computed, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import api from '../api';
+import { showToast } from '../utils/toast';
+
+const router = useRouter();
+
+const goBack = () => {
+  router.push('/apps');
+};
+
+const getBase = () => ({
+  access_token: localStorage.getItem('access_token') || '',
+  email: localStorage.getItem('user_email') || '',
+  user_id: Number(localStorage.getItem('user_id') || 0)
+});
+
+// State
+const colleges = ref([]);
+const selectedCollegeId = ref('');
+const courses = ref([]);
+const selectedCourseId = ref('');
+
+const showApplyCourseModal = ref(false);
+const applyCourseForm = ref({
+  course_name: '',
+  course_category: '专业必修'
+});
+
+const keyPointFiles = ref([]);
+const keyPointFileKeys = ref([]);
+const isUploadingKeyPoint = ref(false);
+const uploadProgressKeyPoint = ref(0);
+
+const contentFiles = ref([]);
+const contentFileKeys = ref([]);
+const isUploadingContent = ref(false);
+const uploadProgressContent = ref(0);
+
+const pastExamFiles = ref([]);
+const pastExamFileKeys = ref([]);
+const isUploadingPastExam = ref(false);
+const uploadProgressPastExam = ref(0);
+
+const isGenerating = ref(false);
+const generateResult = ref(null);
+const parsedQuestions = computed(() => {
+  if (!generateResult.value || !generateResult.value.content) return [];
+  try {
+    return JSON.parse(generateResult.value.content);
+  } catch (e) {
+    return [];
+  }
+});
+const showResultModal = ref(false);
+
+// Question counts
+const singleChoiceCount = ref(8);
+const multipleChoiceCount = ref(0);
+const trueFalseCount = ref(0);
+const fillInBlankCount = ref(0);
+const shortAnswerCount = ref(0);
+const generalPrompt = ref('');
+
+const allowedExts = ['jpg', 'jpeg', 'png', 'pdf', 'ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx'];
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
+// Initialize
+onMounted(async () => {
+  await fetchColleges();
+});
+
+const fetchColleges = async () => {
+  try {
+    const res = await api.post('/review/get_college_list', {
+      page: 1,
+      page_size: 100
+    });
+    if (res.data && res.data.errCode === 0) {
+      colleges.value = res.data.data.list || [];
+    } else {
+      showToast(res.data?.errMsg || '获取学院列表失败', 'error');
+    }
+  } catch (err) {
+    showToast('网络异常，获取学院列表失败', 'error');
+  }
+};
+
+const handleCollegeChange = async () => {
+  selectedCourseId.value = '';
+  courses.value = [];
+  if (!selectedCollegeId.value) return;
+
+  try {
+    const res = await api.post('/review/get_course_list', {
+      college_id: String(selectedCollegeId.value),
+      status: 1, // 只获取正常课程
+      page: 1,
+      page_size: 100
+    });
+    if (res.data && res.data.errCode === 0) {
+      courses.value = res.data.data.list || [];
+    } else {
+      showToast(res.data?.errMsg || '获取课程列表失败', 'error');
+    }
+  } catch (err) {
+    showToast('网络异常，获取课程列表失败', 'error');
+  }
+};
+
+const applyNewCourse = async () => {
+  if (!selectedCollegeId.value) {
+    showToast('请先选择学院', 'warning');
+    return;
+  }
+  if (!applyCourseForm.value.course_name.trim()) {
+    showToast('请输入课程名称', 'warning');
+    return;
+  }
+  
+  try {
+    const res = await api.post('/review/apply_course', {
+      base: getBase(),
+      college_id: String(selectedCollegeId.value),
+      course_name: applyCourseForm.value.course_name,
+      course_category: applyCourseForm.value.course_category
+    });
+    if (res.data && res.data.errCode === 0) {
+      showToast('申请成功，请等待管理员审核！', 'success');
+      showApplyCourseModal.value = false;
+      applyCourseForm.value.course_name = '';
+    } else {
+      showToast(res.data?.errMsg || '申请失败', 'error');
+    }
+  } catch (err) {
+    showToast('网络异常，申请失败', 'error');
+  }
+};
+
+// File handling
+const handleInputClick = (e) => {
+  if (!selectedCollegeId.value || !selectedCourseId.value) {
+    e.preventDefault();
+    showToast('请先选择上面的学院和课程！', 'warning');
+  }
+};
+
+const handleFileChange = async (e, type) => {
+  if (!selectedCollegeId.value || !selectedCourseId.value) {
+    showToast('请先选择学院和课程！', 'warning');
+    e.target.value = '';
+    return;
+  }
+
+  const selectedFiles = Array.from(e.target.files);
+  if (selectedFiles.length === 0) return;
+
+  const file = selectedFiles[0]; 
+
+  if (file.size > MAX_FILE_SIZE) {
+    showToast(`文件大小不能超过 50MB: ${file.name}`, 'error');
+    return;
+  }
+
+  // Validate extension
+  const extMatch = file.name.match(/\.([^.]+)$/);
+  const ext = extMatch ? extMatch[1].toLowerCase() : '';
+  if (!allowedExts.includes(ext)) {
+    showToast(`不支持的文件类型: ${ext}。支持: ${allowedExts.join(', ')}`, 'error');
+    return;
+  }
+
+  const filesRef = type === 'keyPoint' ? keyPointFiles : (type === 'content' ? contentFiles : pastExamFiles);
+  const isUploadingRef = type === 'keyPoint' ? isUploadingKeyPoint : (type === 'content' ? isUploadingContent : isUploadingPastExam);
+  const progressRef = type === 'keyPoint' ? uploadProgressKeyPoint : (type === 'content' ? uploadProgressContent : uploadProgressPastExam);
+  const fileKeysRef = type === 'keyPoint' ? keyPointFileKeys : (type === 'content' ? contentFileKeys : pastExamFileKeys);
+
+  filesRef.value.push({
+    name: file.name,
+    size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
+    status: 'uploading'
+  });
+  
+  const currentFileIndex = filesRef.value.length - 1;
+
+  try {
+    isUploadingRef.value = true;
+    progressRef.value = 10;
+
+    const sigRes = await api.post('/review/get_review_oss_key', {
+      base: getBase(),
+      file_ext: ext
+    });
+
+    if (!sigRes.data || sigRes.data.errCode !== 0) {
+      throw new Error(sigRes.data?.errMsg || '获取上传签名失败');
+    }
+
+    const ossData = sigRes.data.data;
+    progressRef.value = 30;
+
+    const formData = new FormData();
+    formData.append('key', ossData.key);
+    formData.append('policy', ossData.policy);
+    formData.append('OSSAccessKeyId', ossData.oss_access_key_id);
+    formData.append('success_action_status', '200');
+    formData.append('signature', ossData.signature);
+    formData.append('x-oss-security-token', ossData.security_token);
+    formData.append('file', file);
+
+    const uploadRes = await fetch(ossData.host, {
+      method: 'POST',
+      body: formData
+    });
+
+    if (!uploadRes.ok) {
+      throw new Error(`上传失败: ${uploadRes.statusText}`);
+    }
+
+    progressRef.value = 100;
+    
+    fileKeysRef.value.push(ossData.key);
+    filesRef.value[currentFileIndex].status = 'success';
+    showToast('文件上传成功', 'success');
+
+  } catch (err) {
+    filesRef.value[currentFileIndex].status = 'error';
+    showToast(err.message || '上传异常', 'error');
+  } finally {
+    isUploadingRef.value = false;
+    setTimeout(() => { progressRef.value = 0; }, 1000);
+    e.target.value = '';
+  }
+};
+
+const generateExam = async () => {
+  if (!selectedCourseId.value) {
+    showToast('请选择课程', 'warning');
+    return;
+  }
+  if (keyPointFileKeys.value.length === 0 && contentFileKeys.value.length === 0 && pastExamFileKeys.value.length === 0) {
+    showToast('请先上传至少一个重点、内容或试卷文件', 'warning');
+    return;
+  }
+
+  if (
+    singleChoiceCount.value < 0 ||
+    multipleChoiceCount.value < 0 ||
+    trueFalseCount.value < 0 ||
+    fillInBlankCount.value < 0 ||
+    shortAnswerCount.value < 0
+  ) {
+    showToast('题型数量不能为负数', 'warning');
+    return;
+  }
+
+  if (
+    singleChoiceCount.value > 20 ||
+    trueFalseCount.value > 20 ||
+    fillInBlankCount.value > 20
+  ) {
+    showToast('单选、判断、填空最多为20道', 'warning');
+    return;
+  }
+
+  if (
+    multipleChoiceCount.value > 10 ||
+    shortAnswerCount.value > 10
+  ) {
+    showToast('多选、简答最多为10道', 'warning');
+    return;
+  }
+  
+  const totalQuestions = 
+    singleChoiceCount.value + 
+    multipleChoiceCount.value + 
+    trueFalseCount.value + 
+    fillInBlankCount.value + 
+    shortAnswerCount.value;
+
+  if (totalQuestions <= 0) {
+    showToast('总题数必须大于0', 'warning');
+    return;
+  }
+
+  isGenerating.value = true;
+  generateResult.value = null;
+
+  try {
+    const res = await api.post('/review/post_review_generate', {
+      base: getBase(),
+      key_point_file_keys: keyPointFileKeys.value,
+      content_file_keys: contentFileKeys.value,
+      past_exam_file_keys: pastExamFileKeys.value,
+      course_id: String(selectedCourseId.value),
+      single_choice_count: singleChoiceCount.value,
+      multiple_choice_count: multipleChoiceCount.value,
+      true_false_count: trueFalseCount.value,
+      fill_in_blank_count: fillInBlankCount.value,
+      short_answer_count: shortAnswerCount.value,
+      general_prompt: generalPrompt.value
+    }, {
+      timeout: 600000 // 10 minutes timeout for long-running task
+    });
+
+    if (res.data && res.data.errCode === 0) {
+      generateResult.value = res.data.data;
+      showToast('任务提交成功！', 'success');
+    } else {
+      throw new Error(res.data?.errMsg || '生成请求失败');
+    }
+  } catch (err) {
+    showToast(err.message || '网络异常', 'error');
+  } finally {
+    isGenerating.value = false;
+  }
+};
+
+// History State
+const activeTab = ref('generate'); // 'generate' or 'history'
+const historyList = ref([]);
+const isFetchingHistory = ref(false);
+
+const fetchHistory = async () => {
+  if (isFetchingHistory.value) return;
+  isFetchingHistory.value = true;
+  try {
+    const res = await api.post('/review/get_user_exam_history', {
+      base: getBase(),
+      page: 1,
+      page_size: 50
+    });
+    if (res.data && res.data.errCode === 0) {
+      historyList.value = res.data.data.list || [];
+    } else {
+      showToast(res.data?.errMsg || '获取记录失败', 'error');
+    }
+  } catch (err) {
+    showToast('网络异常，获取记录失败', 'error');
+  } finally {
+    isFetchingHistory.value = false;
+  }
+};
+
+const switchTab = (tab) => {
+  activeTab.value = tab;
+  if (tab === 'history') {
+    fetchHistory();
+  }
+};
+
+const viewHistoryDetail = (item) => {
+  generateResult.value = {
+    content: item.result_content,
+    pdfUrl: item.pdf_url,
+    taskId: item.task_id
+  };
+  showResultModal.value = true;
+};
+
+</script>

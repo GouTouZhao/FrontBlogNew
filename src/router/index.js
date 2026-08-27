@@ -35,6 +35,21 @@ const router = createRouter({
       path: '/article/:id',
       name: 'article',
       component: () => import('../views/ArticleView.vue')
+    },
+    {
+      path: '/apps',
+      name: 'apps',
+      component: () => import('../views/AppsView.vue')
+    },
+    {
+      path: '/apps/exam-generator',
+      name: 'exam-generator',
+      component: () => import('../views/ExamGeneratorView.vue')
+    },
+    {
+      path: '/admin/course',
+      name: 'course-admin',
+      component: () => import('../views/CourseAdminView.vue')
     }
   ],
   scrollBehavior(to, from, savedPosition) {

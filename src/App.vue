@@ -138,6 +138,10 @@ const goToPost = () => {
   router.push('/post');
 };
 
+const goToApps = () => {
+  router.push('/apps');
+};
+
 const goToAuthor = () => {
   router.push('/author');
 };
@@ -242,6 +246,15 @@ const handleAuthAction = () => {
       </nav>
 
       <div v-if="isSidebarExpanded" class="sidebar-bottom">
+        <div class="app-center-link" @click="goToApps" :class="{ active: route.path.startsWith('/apps') }">
+          <svg class="app-icon" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          <span class="nav-text">创意应用中心</span>
+        </div>
         <div class="user-info">
           <div 
             v-if="currentUser.avatarUrl"
@@ -446,6 +459,32 @@ const handleAuthAction = () => {
 
 .sidebar-bottom {
   padding: 0 20px;
+}
+
+.app-center-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 16px;
+  transition: background-color 0.2s, color 0.2s;
+  color: var(--text-color);
+  opacity: 0.8;
+  margin-bottom: 12px;
+  background: rgba(128, 128, 128, 0.1);
+}
+
+.app-center-link:hover, .app-center-link.active {
+  opacity: 1;
+  background: var(--text-color);
+  color: var(--bg-color);
+}
+
+.app-icon {
+  flex-shrink: 0;
 }
 
 .user-info {
