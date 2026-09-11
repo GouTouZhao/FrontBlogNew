@@ -366,6 +366,23 @@ const viewHistoryDetail = (item) => {
   showResultModal.value = true;
 };
 
+const downloadPdf = async (taskId) => {
+  if (!taskId) return;
+  try {
+    const res = await api.post('/review/get_exam_pdf_url', {
+      base: getBase(),
+      task_id: taskId
+    });
+    if (res.data && res.data.errCode === 0 && res.data.data.pdf_url) {
+      window.open(res.data.data.pdf_url, '_self');
+    } else {
+      showToast(res.data?.errMsg || '获取下载链接失败', 'error');
+    }
+  } catch (err) {
+    showToast('网络异常，获取下载链接失败', 'error');
+  }
+};
+
 </script>\n\n<template>
   <div class="exam-generator-container">
     <div class="header">
@@ -579,10 +596,10 @@ const viewHistoryDetail = (item) => {
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
               查看排版试卷
             </button>
-            <a :href="generateResult.pdf_url" target="_blank" class="download-btn" v-if="generateResult.pdf_url">
+            <button class="download-btn" @click="downloadPdf(generateResult.task_id)" v-if="generateResult.pdf_url || generateResult.pdf_key">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
               下载 PDF
-            </a>
+            </button>
           </div>
           <p class="result-hint" v-if="!generateResult.content">试卷生成由于需要使用大模型，可能需要几分钟时间，请稍后在后台查看生成结果。</p>
         </div>
@@ -618,10 +635,10 @@ const viewHistoryDetail = (item) => {
               查看排版试卷
             </button>
             <span v-else class="history-date" style="margin-right: 15px">生成中，请稍后...</span>
-            <a :href="item.pdf_url" target="_blank" class="download-btn" v-if="item.pdf_url">
+            <button class="download-btn" @click="downloadPdf(item.task_id)" v-if="item.result_pdf_key">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
               下载 PDF
-            </a>
+            </button>
           </div>
         </div>
       </div>
