@@ -228,6 +228,10 @@ const submitCreateBill = async () => {
 };
 
 const openEditBillModal = (bill) => {
+  if (bill.creator_id !== myUserId.value) {
+    showToast('只能修改或删除自己创建的账单', 'warning');
+    return;
+  }
   editBillForm.value = {
     bill_id: bill.bill_id,
     amount: (bill.amount / 100).toFixed(2),
