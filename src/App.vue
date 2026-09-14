@@ -549,7 +549,7 @@ const handleAuthAction = () => {
 @media (max-width: 768px) {
   .main-content {
     padding: 20px;
-    margin-left: 60px;
+    margin-left: 0;
   }
 }
 </style>
