@@ -47,6 +47,11 @@ const router = createRouter({
       component: () => import('../views/ExamGeneratorView.vue')
     },
     {
+      path: '/apps/group-accounting',
+      name: 'group-accounting',
+      component: () => import('../views/GroupAccountingView.vue')
+    },
+    {
       path: '/admin/course',
       name: 'course-admin',
       component: () => import('../views/CourseAdminView.vue')

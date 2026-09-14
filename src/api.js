@@ -1,5 +1,6 @@
 import axios from 'axios';
-
+// https://api.goutou.club
+// http://127.0.0.1:10002
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.goutou.club';
 
 const api = axios.create({

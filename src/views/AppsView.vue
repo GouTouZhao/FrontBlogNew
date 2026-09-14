@@ -13,6 +13,13 @@ const apps = computed(() => {
       name: '生成试卷助手',
       description: '上传课件或文档，智能提取重点内容并自动生成相关试卷。',
       icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'
+    },
+    {
+      id: 'group-accounting',
+      path: '/apps/group-accounting',
+      name: '群组记账',
+      description: '团队/朋友出行、活动记账小助手，轻松管理每一笔共同支出。',
+      icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z'
     }
   ];
 
