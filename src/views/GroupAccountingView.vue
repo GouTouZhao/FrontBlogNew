@@ -228,10 +228,6 @@ const submitCreateBill = async () => {
 };
 
 const openEditBillModal = (bill) => {
-  if (bill.creator_id !== myUserId.value) {
-    showToast('只能修改或删除自己创建的账单', 'warning');
-    return;
-  }
   editBillForm.value = {
     bill_id: bill.bill_id,
     amount: (bill.amount / 100).toFixed(2),
@@ -475,28 +471,28 @@ const copyActivityId = (id) => {
     <!-- Edit/Delete Bill Modal -->
     <div v-if="showEditBillModal" class="modal-overlay" @click.self="showEditBillModal = false">
       <div class="modal-content">
-        <h3 class="modal-title">编辑账单</h3>
+        <h3 class="modal-title">{{ String(editBillForm.creator_id) === String(myUserId) ? '编辑账单' : '账单详情' }}</h3>
         <div class="form-group">
           <label class="form-label">金额 (元)</label>
-          <input v-model="editBillForm.amount" type="number" step="0.01" class="text-input" placeholder="0.00">
+          <input v-model="editBillForm.amount" type="number" step="0.01" class="text-input" placeholder="0.00" :disabled="String(editBillForm.creator_id) !== String(myUserId)">
         </div>
         <div class="form-group">
           <label class="form-label">消费描述</label>
-          <input v-model="editBillForm.description" type="text" class="text-input" placeholder="例如：午饭">
+          <input v-model="editBillForm.description" type="text" class="text-input" placeholder="例如：午饭" :disabled="String(editBillForm.creator_id) !== String(myUserId)">
         </div>
         <div class="form-group">
           <label class="form-label">付款人</label>
-          <select v-model="editBillForm.payer_id" class="text-input">
+          <select v-model="editBillForm.payer_id" class="text-input" :disabled="String(editBillForm.creator_id) !== String(myUserId)">
             <option v-for="m in activityMembers" :key="m.user_id" :value="m.user_id">
-              {{ m.nickname }} {{ m.user_id === myUserId ? '(我)' : '' }}
+              {{ m.nickname }} {{ String(m.user_id) === String(myUserId) ? '(我)' : '' }}
             </option>
           </select>
         </div>
-        <div class="modal-actions" style="justify-content: space-between;">
-          <button class="delete-btn" @click="submitDeleteBill">删除</button>
+        <div class="modal-actions" :style="{ 'justify-content': String(editBillForm.creator_id) === String(myUserId) ? 'space-between' : 'flex-end' }">
+          <button v-if="String(editBillForm.creator_id) === String(myUserId)" class="delete-btn" @click="submitDeleteBill">删除</button>
           <div>
-            <button class="cancel-btn" style="margin-right: 12px;" @click="showEditBillModal = false">取消</button>
-            <button class="confirm-btn" @click="submitEditBill">保存</button>
+            <button class="cancel-btn" :style="{ 'margin-right': String(editBillForm.creator_id) === String(myUserId) ? '12px' : '0' }" @click="showEditBillModal = false">{{ String(editBillForm.creator_id) === String(myUserId) ? '取消' : '关闭' }}</button>
+            <button v-if="String(editBillForm.creator_id) === String(myUserId)" class="confirm-btn" @click="submitEditBill">保存</button>
           </div>
         </div>
       </div>
@@ -773,24 +769,30 @@ const copyActivityId = (id) => {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
 }
 
 .bill-top, .bill-bottom {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
 }
 
 .bill-title {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .bill-amount {
   font-size: 16px;
   font-weight: 700;
   color: var(--text-color);
+  flex-shrink: 0;
 }
 
 .my-expense {
@@ -801,10 +803,21 @@ const copyActivityId = (id) => {
   color: #fff;
 }
 
-.bill-time, .bill-payer {
+.bill-time {
   font-size: 12px;
   color: var(--text-color);
   opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.bill-payer {
+  font-size: 12px;
+  color: var(--text-color);
+  opacity: 0.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: right;
 }
 
 /* Stats UI */
@@ -840,12 +853,18 @@ const copyActivityId = (id) => {
   font-size: 13px;
   opacity: 0.7;
   margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .stat-amount {
   font-size: 18px;
   font-weight: 700;
   color: var(--text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Modals */
@@ -922,6 +941,10 @@ const copyActivityId = (id) => {
 @media (max-width: 640px) {
   .title {
     font-size: 24px;
+  }
+  
+  .stats-grid {
+    flex-wrap: wrap;
   }
   
   .bill-item {
