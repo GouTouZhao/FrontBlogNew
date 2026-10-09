@@ -20,6 +20,13 @@ const apps = computed(() => {
       name: '群组记账',
       description: '团队/朋友出行、活动记账小助手，轻松管理每一笔共同支出。',
       icon: 'M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z'
+    },
+    {
+      id: 'wechat-tool',
+      path: '/apps/wechat-tool',
+      name: '微信对话生成器',
+      description: '模拟微信聊天界面，生成对话截图。',
+      icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z'
     }
   ];
 

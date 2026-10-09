@@ -52,6 +52,11 @@ const router = createRouter({
       component: () => import('../views/GroupAccountingView.vue')
     },
     {
+      path: '/apps/wechat-tool',
+      name: 'wechat-tool',
+      component: () => import('../views/WechatToolView.vue')
+    },
+    {
       path: '/admin/course',
       name: 'course-admin',
       component: () => import('../views/CourseAdminView.vue')

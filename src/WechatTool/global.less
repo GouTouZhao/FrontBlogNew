@@ -1,0 +1,91 @@
+:root {
+  scroll-behavior: smooth;
+  // --theme-color: #e8a95b;
+  --theme-color: #FD6585;
+  --light-bg-color: #EDEDED;
+  --light-text-color: #1A1A1A;
+  --dark-bg-color: #232323;
+  --dark-text-color: snow;
+}
+
+#app {
+  // font-family: 'SF Pro', 'PingFang SC';
+}
+
+@font-face {
+  font-family: SF Pro;
+  font-style: normal;
+  font-weight: 600;
+  src: url(./assets/fonts/sf-pro-text_semibold.woff2) format("woff2");
+}
+@font-face {
+  font-family: SF Pro;
+  font-style: normal;
+  font-weight: 500;
+  src: url(./assets/fonts/sf-pro-text_medium.woff2) format("woff2");
+}
+@font-face {
+  font-family: SF Pro;
+  font-style: normal;
+  font-weight: 400;
+  src: url(./assets/fonts/sf-pro-text_regular.woff2) format("woff2");
+}
+
+// 禁止图片被拖拽
+img {
+  // pointer-events: none;
+  -webkit-user-drag: none;
+  // user-drag: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+// 设定滚轮
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  border-radius: 4px;
+  box-shadow: inset 0 0 5px #cac8c6;
+  background: #cac8c6;
+}
+::-webkit-scrollbar-track {
+  background: 0 0;
+  border-radius: 1px;
+}
+
+.ps {
+  position: relative;
+  height: 100%;
+  overflow-y: hidden;
+}
+
+.ps .ps__rail-x:hover, .ps .ps__rail-y:hover, .ps .ps__rail-x:focus, .ps .ps__rail-y:focus, .ps .ps__rail-x.ps--clicking, .ps .ps__rail-y.ps--clicking {
+  background-color: transparent !important;
+}
+
+.ps__rail-y:hover > .ps__thumb-y, .ps__rail-y:focus > .ps__thumb-y, .ps__rail-y.ps--clicking .ps__thumb-y {
+  width: 8px !important;
+}
+
+.ant-form-item {
+  margin-bottom: 14px;
+}
+
+.default-loading {
+  flex: 1;
+  height: 136px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.form-tip {
+  position: absolute;
+  font-size: 12px;
+  color: gray;
+}
