@@ -2,7 +2,7 @@
   <perfect-scrollbar>
     <a-form :model="formState" :label-col="{style: {width: '108px'}}" class="config-appearance">
       <a-form-item label="机型">
-        <a-select :options="models" v-model:value="formState.model" disabled></a-select>
+        <a-select :options="models" v-model:value="formState.model"></a-select>
       </a-form-item>
       <a-form-item label="深色模式">
         <a-switch v-model:checked="formState.darkMode">
@@ -13,10 +13,13 @@
       <a-form-item label="wifi信号">
         <a-select :options="wifiSignals" v-model:value="formState.wifiSignal"></a-select>
       </a-form-item>
-      <a-form-item label="流量信号">
+      <a-form-item :label="isHuawei ? '流量信号1' : '流量信号'">
         <a-select :options="phoneSignals" v-model:value="formState.phoneSignal"></a-select>
       </a-form-item>
-      <a-form-item label="手机信号">
+      <a-form-item v-if="isHuawei" label="流量信号2">
+        <a-select :options="phoneSignals" v-model:value="formState.phoneSignal2"></a-select>
+      </a-form-item>
+      <a-form-item label="手机信号" v-if="!isHuawei">
         <a-select :options="networkTypes" v-model:value="formState.networkType"></a-select>
       </a-form-item>
       <a-form-item label="手机时间">
@@ -81,7 +84,7 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, reactive, ref, watch } from "vue";
+import { onMounted, onUnmounted, reactive, ref, watch, computed } from "vue";
 import { CheckOutlined, CloseOutlined } from "@ant-design/icons-vue";
 import dayjs from "dayjs";
 // import { useFetch } from '@vueuse/core'
@@ -98,6 +101,10 @@ onUnmounted(() => {
 
 const formState = ref({});
 
+const isHuawei = computed(() => {
+  return formState.value?.model === 'huawei_junxiu' || useSystemStore.appearance?.model === 'huawei_junxiu';
+});
+
 watch(() => useSystemStore.appearance.timeFollowSystem, (newVal) => {
   if (newVal) {
     timer = setInterval(() => {
@@ -113,6 +120,9 @@ watch(() => useSystemStore.appearance.timeFollowSystem, (newVal) => {
 onMounted(() => {
   watch(() => useSystemStore.appearance, (newVal) => {
     formState.value = newVal
+    if (formState.value && formState.value.phoneSignal2 === undefined) {
+      formState.value.phoneSignal2 = 'default';
+    }
     imageInfo.url = newVal.chatBackground;
   }, {
     immediate: true,

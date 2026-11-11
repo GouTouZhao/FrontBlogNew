@@ -1,10 +1,17 @@
 <template>
-  <div class="phone-bottom" :class="{'dark': appearance.darkMode}">
+  <div class="phone-bottom" :class="{'dark': appearance.darkMode, 'huawei-bottom': isHuawei}">
     <div class="phone-bottom-chat">
       <div class="wechat-bottom-icon" :class="[appearance.voiceMode ? 'wechat-voice-say-icon' : 'wechat-voice-icon']">
         语音
       </div>
-      <div class="wechat-input" :class="{'wechat-input-say': appearance.voiceMode, 'wechat-input-sync': !appearance.voiceMode && appearance.syncInputText}" v-html="wechatInput"></div>
+      <div class="wechat-input" :class="{'wechat-input-say': appearance.voiceMode, 'wechat-input-sync': !appearance.voiceMode && appearance.syncInputText}">
+        <span class="wechat-input-text" v-html="wechatInput"></span>
+        <div v-if="showVoiceInputIcon" class="wechat-input-voice-btn" aria-label="语音输入">
+          <svg :viewBox="voiceInputIcon.viewBox" width="100%" height="100%" fill="currentColor">
+            <path v-for="(p, i) in voiceInputIcon.paths" :key="i" :d="p.d" :transform="p.transform" />
+          </svg>
+        </div>
+      </div>
       <div class="wechat-bottom-icon wechat-emoji-icon">表情</div>
       <div class="wechat-bottom-icon" :class="[!appearance.voiceMode && appearance.syncInputText && useChatStore.inputText && useUserStore.activeRole === 'own' ? 'wechat-bottom-sync': 'wechat-more-icon']">发送</div>
     </div>
@@ -13,10 +20,11 @@
 </template>
 
 <script setup>
-import { ref, watch } from "vue"
+import { ref, watch, computed } from "vue"
 import useStore from "@/WechatTool/store";
-const { useChatStore, useUserStore } = useStore();
+const { useChatStore, useUserStore, useSystemStore } = useStore();
 import { renderText } from "@/WechatTool/utils/utils";
+import { voiceInputIcon } from "./bottomIcons";
 
 const props = defineProps({
   appearance: {
@@ -41,6 +49,19 @@ watch(() => [props.appearance.voiceMode, useChatStore.inputText, useUserStore.ac
 }, {
   immediate: true,
 })
+
+const showVoiceInputIcon = computed(() => {
+  if (props.appearance.voiceMode) return false;
+  if (props.appearance.syncInputText && useChatStore.inputText && useUserStore.activeRole === 'own') {
+    return false;
+  }
+  return true;
+});
+
+const isHuawei = computed(() => {
+  const m = props.appearance?.model || useSystemStore.appearance?.model;
+  return m === 'huawei_junxiu';
+});
 </script>
 
 <style lang="less" scoped>
@@ -96,25 +117,57 @@ watch(() => [props.appearance.voiceMode, useChatStore.inputText, useUserStore.ac
       background: #fff;
       border-radius: 15px;
       flex: 1;
-      text-indent: -9999px;
       margin: 0 32px;
-    }
-    .wechat-input-say {
-      font-size: 48px;
-      text-indent: 0;
-      text-align: center;
-      line-height: 120px;
-      font-weight: 500;
-    }
-    .wechat-input-sync {
+      position: relative;
       display: flex;
       align-items: center;
-      font-size: 48px;
-      text-indent: 0;
-      padding: 0 0.6em;
-      line-height: 120px;
-      font-weight: 500;
-      overflow: hidden;
+
+      .wechat-input-text {
+        width: 100%;
+        display: none;
+        font-size: 48px;
+        font-weight: 500;
+        line-height: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .wechat-input-voice-btn {
+        position: absolute;
+        right: 24px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 41.4px;
+        height: 55px;
+        color: #747474;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+      }
+    }
+    .wechat-input-say {
+      justify-content: center;
+      .wechat-input-text {
+        display: block;
+        text-align: center;
+        font-size: 48px;
+        font-weight: 500;
+        line-height: 120px;
+      }
+    }
+    .wechat-input-sync {
+      .wechat-input-text {
+        display: flex;
+        align-items: center;
+        font-size: 48px;
+        font-weight: 500;
+        line-height: 120px;
+        padding-left: 0.6em;
+        padding-right: 75px;
+        overflow: hidden;
+      }
     }
   }
   .phone-bottom-bar {
@@ -150,11 +203,25 @@ watch(() => [props.appearance.voiceMode, useChatStore.inputText, useUserStore.ac
       }
       .wechat-input {
         background: #2b2b2b;
+        .wechat-input-voice-btn {
+          color: rgba(255, 255, 255, 0.45);
+        }
       }
     }
     .phone-bottom-bar {
       i {
         background: url(@/WechatTool/assets/images/bottom/phone-bottom-bar-dark.png) no-repeat;
+      }
+    }
+  }
+
+  &.huawei-bottom {
+    .phone-bottom-chat {
+      position: relative;
+      top: 10px;
+
+      .wechat-emoji-icon {
+        margin-right: 10px;
       }
     }
   }

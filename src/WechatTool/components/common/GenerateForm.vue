@@ -127,7 +127,7 @@
           </div> 
           <div class="datetime-select">
             <a-select :options="morningAfternoon" v-model:value="formState.datetime.ap" placeholder="上下午" allowClear></a-select>
-            <a-select :options="toArr(24)" v-model:value="formState.datetime.hour" placeholder="小时"></a-select>
+            <a-select :options="toArr(24, false)" v-model:value="formState.datetime.hour" placeholder="小时"></a-select>
             <a-select :options="toArr(60)" v-model:value="formState.datetime.minute" placeholder="分钟"></a-select>
           </div>
           预览：<span class="time-preview">{{ selectTime }}</span>
@@ -202,7 +202,7 @@ let formState = reactive({
     minute: ('00' + dayjs().get('minute')).slice(-2),
   },
   avInviteType: "audio",
-  avInviteState: "",
+  avInviteState: "success",
   avInviteHour: "00",
   avInviteMinute: "00",
   avInviteSecond: "10",
@@ -264,8 +264,13 @@ watch(() => props.chatInfo, (newVal) => {
 const selectTime = ref("")
 // 监听时间控件变化，渲染时间预览
 watch(() => formState.datetime, (newVal) => {
-  const showColon = newVal.hour && newVal.minute ? ":" : ""
-  selectTime.value = `${newVal.year || ""}${newVal.month || ""}${newVal.date || ""} ${newVal.week || ""} ${newVal.ap || ""}${newVal.hour || ""}${showColon}${newVal.minute || ""}`
+  const showColon = newVal.hour !== undefined && newVal.hour !== '' && newVal.minute ? ":" : ""
+  let hourStr = newVal.hour !== undefined && newVal.hour !== '' ? String(newVal.hour) : ""
+  // 去除小时前导0，例如 09:56 直接显示为 9:56
+  if (/^0[1-9]$/.test(hourStr)) {
+    hourStr = hourStr.replace(/^0/, '')
+  }
+  selectTime.value = `${newVal.year || ""}${newVal.month || ""}${newVal.date || ""} ${newVal.week || ""} ${newVal.ap || ""}${hourStr}${showColon}${newVal.minute || ""}`
 }, {
   immediate: true,
   deep: true,

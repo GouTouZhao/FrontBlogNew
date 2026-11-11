@@ -1,5 +1,5 @@
 <template>
-  <div class="phone-nav" :class="{'dark': appearance.darkMode}">
+  <div class="phone-nav" :class="{'dark': appearance.darkMode, 'huawei-nav': isHuawei}">
     <div class="phone-nav-left">
       <div class="phone-nav-back">返回</div>
       <span v-if="appearance.unreadMessages">{{appearance.unreadMessages > 99 ? '99+' : appearance.unreadMessages}}</span>
@@ -25,6 +25,11 @@ const props = defineProps({
     default: () => {},
   }
 })
+
+const isHuawei = computed(() => {
+  const m = props.appearance?.model || useSystemStore.appearance?.model;
+  return m === 'huawei_junxiu';
+});
 
 const chatTitle = computed(() => {
   return truncateMiddle(useSystemStore.appearance.chatTitle, 14)
@@ -72,25 +77,41 @@ const chatTitle = computed(() => {
     display: flex;
     justify-content: center;
     .center-span {
-      font-size: 42px;
+      font-size: var(--phone-nav-title-size, 42px);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-weight: 500;
+      font-weight: var(--phone-nav-title-weight, 500);
       -webkit-text-stroke: 0.5px currentColor; /* 微调文字粗细，可以修改 0.5px 来调节 */
       letter-spacing: 3px; /* 微调字间距 */
       .user-name {
-        // max-width: 600px;
-        // overflow: hidden;
-        // text-overflow: ellipsis;
-        // white-space: nowrap;
+        font-family: inherit;
+        font-size: inherit;
+        font-weight: inherit;
+        -webkit-text-stroke: inherit;
+        letter-spacing: inherit;
       }
       i {
-        width: 36px;
-        height: 44px;
+        width: var(--phone-nav-earphone-width, 36px);
+        height: var(--phone-nav-earphone-height, 44px);
         background: url(@/WechatTool/assets/images/nav/wechat-trans-earphone-light.png) no-repeat;
         background-size: 100% 100%;
-        margin: 8px 0 0 15px;
+        margin: var(--phone-nav-earphone-margin-top, 8px) 0 0 15px;
+      }
+    }
+  }
+
+  &.huawei-nav {
+    .phone-nav-center {
+      .center-span,
+      .center-span * {
+        font-family: '『汜霰』有瑶圆', '汜霰有瑶圆', 'SiXianYouYaoYuan', 'JunxiuRoundedNum', -apple-system-rounded, 'SF Pro Rounded', 'Arial Rounded MT Bold', 'HarmonyOS Sans Rounded', 'YouYuan', '幼圆', 'STYuanti-SC-Regular', '华文细圆', sans-serif !important;
+      }
+      .center-span {
+        font-weight: 600;
+        -webkit-text-stroke: 1.2px currentColor; /* 联系人名字粗细，可调节数值（越大越粗） */
+        letter-spacing: 1px;
+        transform: translateY(-11px); /* 联系人姓名向上移动11px */
       }
     }
   }

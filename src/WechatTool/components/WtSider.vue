@@ -1,13 +1,13 @@
 <template>
-  <div class="wt-sider">
+  <div class="wt-sider" :class="{ 'batch-sider-collapsed': useSystemStore.activeMenu === 'batch' }">
     <div class="menu-box">
       <div v-for="menu in menus" :key="menu.value" class="menu-item"
         :class="{ active: useSystemStore.activeMenu === menu.value }" @click="handleMenuClick(menu)">
-        <i :class="['wefont', 'weicon-' + menu.value]"></i>
+        <component :is="menuIcons[menu.value]" class="menu-icon" />
         <p>{{ menu.label }}</p>
       </div>
     </div>
-    <div class="wt-config">
+    <div class="wt-config" v-if="useSystemStore.activeMenu !== 'batch'">
       <keep-alive>
         <component :is="configComponents[useSystemStore.activeMenu]" />
       </keep-alive>
@@ -17,9 +17,14 @@
 
 <script setup>
 import { reactive, shallowRef } from "vue";
+import {
+  SettingOutlined,
+  MessageOutlined,
+  AppstoreAddOutlined,
+  QuestionCircleOutlined,
+} from "@ant-design/icons-vue";
 import ConfigAppearance from "./ConfigAppearance.vue";
 import ConfigChat from "./ConfigChat.vue";
-import ConfigTemplate from "./ConfigTemplate.vue";
 import ConfigInstructions from "./ConfigInstructions.vue";
 import useStore from "@/WechatTool/store";
 const { useSystemStore } = useStore();
@@ -32,22 +37,28 @@ const menus = reactive([
     label: "对话设置",
     value: "chat",
   }, {
-    label: "模板管理",
-    value: "template",
+    label: "批量生成",
+    value: "batch",
   }, {
     label: "使用说明",
     value: "instructions",
   }
-])
+]);
+
+const menuIcons = {
+  appearance: SettingOutlined,
+  chat: MessageOutlined,
+  batch: AppstoreAddOutlined,
+  instructions: QuestionCircleOutlined,
+};
 
 const handleMenuClick = (menu) => {
-  useSystemStore.activeMenu = menu.value
-}
+  useSystemStore.activeMenu = menu.value;
+};
 
 const configComponents = shallowRef({
   appearance: ConfigAppearance,
   chat: ConfigChat,
-  template: ConfigTemplate,
   instructions: ConfigInstructions,
 });
 </script>
@@ -56,6 +67,10 @@ const configComponents = shallowRef({
 .wt-sider {
   display: flex;
   height: 100%;
+
+  &.batch-sider-collapsed {
+    width: 80px;
+  }
 
   .menu-box {
     width: 80px;
@@ -70,9 +85,10 @@ const configComponents = shallowRef({
       height: 80px;
       cursor: pointer;
       transition: all .3s;
-      color: var(--text-color);
-      opacity: 0.7;
+      color: gray;
+      opacity: 0.8;
 
+      .menu-icon,
       i {
         font-size: 24px;
         margin-bottom: 6px;
@@ -81,10 +97,13 @@ const configComponents = shallowRef({
       &.active {
         background-color: var(--bg-color);
         opacity: 1;
+        color: var(--text-color);
+        font-weight: bold;
       }
       &:hover {
         background-color: var(--bg-color);
         opacity: 0.9;
+        color: var(--text-color);
       }
       p {
         margin: 0;

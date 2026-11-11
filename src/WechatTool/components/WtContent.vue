@@ -23,10 +23,10 @@
 </template>
 
 <script setup>
-import { ref, watch } from "vue";
+import { ref, watch, onMounted } from "vue";
 import useStore from "@/WechatTool/store";
 const { useSystemStore } = useStore();
-import { models } from "@/WechatTool/utils/enum"
+import { models, getModelConfig } from "@/WechatTool/utils/enum"
 import PhoneBar from "./phone/PhoneBar.vue";
 import PhoneNav from "./phone/PhoneNav.vue";
 import PhoneBody from "./phone/PhoneBody.vue";
@@ -35,21 +35,16 @@ import PhoneGenerate from "./phone/PhoneGenerate.vue"
 import PhoneTools from "./phone/PhoneTools.vue"
 import emojiBase64 from "@/WechatTool/utils/emojiBase64";
 
-const phoneWidth = ref(1080)
-const phoneHeight = ref(2388)
+const phoneWidth = ref(1256)
+const phoneHeight = ref(2760)
 const phoneScale = ref(1)
 const appearance = ref({})
 const wrapperHeight = ref(0)
 const phoneStyle = ref({})
-watch(() => useSystemStore.appearance, (newVal) => {
-  // The phone keeps its source resolution; only the editor preview is scaled.
-  // 做缩放是为了在预览时好看，同时在生成图片、视频时高清
-  const model = 'android'
-  if (newVal.model !== model) {
-    useSystemStore.appearance.model = model
-  }
-  appearance.value = useSystemStore.appearance
-  const { width, height } = models.find(item => item.value === model)
+
+const applyModelConfig = (modelVal) => {
+  const currentModel = getModelConfig(modelVal)
+  const { width, height } = currentModel
   useSystemStore.phoneWidth = phoneWidth.value = width
   useSystemStore.phoneHeight = phoneHeight.value = height
   useSystemStore.phoneScale = phoneScale.value = 360 / width
@@ -57,21 +52,67 @@ watch(() => useSystemStore.appearance, (newVal) => {
   phoneStyle.value = {
     width: `${width}px`,
     height: `${height}px`,
-    '--phone-bar-height': '105px',
-    '--phone-nav-height': '141px',
-    '--phone-content-top': '246px',
-    '--phone-content-bottom': '167px',
-    '--phone-bottom-height': '167px',
-    '--phone-bottom-bar-display': 'none',
-    '--phone-message-size': '42px',
-    '--phone-message-min-height': '108px',
-    '--phone-message-padding-y': '18px',
-    '--phone-message-line-height': '59px',
-    '--phone-message-tail-top': '36px',
-    '--phone-avatar-size': '108px',
+    '--phone-bar-height': `${currentModel.barHeight}px`,
+    '--phone-nav-height': `${currentModel.navHeight}px`,
+    '--phone-content-top': `${currentModel.contentTop}px`,
+    '--phone-content-bottom': `${currentModel.contentBottom}px`,
+    '--phone-bottom-height': `${currentModel.bottomHeight}px`,
+    '--phone-bottom-bar-display': currentModel.bottomBarDisplay || 'none',
+    '--phone-message-size': `${currentModel.messageSize}px`,
+    '--phone-message-min-height': `${currentModel.messageMinHeight}px`,
+    '--phone-message-padding-y': `${currentModel.messagePaddingY}px`,
+    '--phone-message-padding-x': `${currentModel.messagePaddingX}px`,
+    '--phone-message-line-height': `${currentModel.messageLineHeight}px`,
+    '--phone-message-tail-top': `${currentModel.messageTailTop}px`,
+    '--phone-avatar-size': `${currentModel.avatarSize}px`,
+    '--phone-bar-icon-top': `${currentModel.barIconTop}px`,
+    '--phone-bubble-margin-near': `${currentModel.bubbleMarginNear}px`,
+    '--phone-bubble-margin-far': `${currentModel.bubbleMarginFar}px`,
+    '--phone-username-size': `${currentModel.usernameSize}px`,
+    '--phone-username-margin-left': `${currentModel.usernameMarginLeft}px`,
+    '--phone-revoke-size': `${currentModel.revokeSize}px`,
+    '--phone-revoke-weight': currentModel.revokeWeight || '500',
+    '--phone-time-size': `${currentModel.timeSize}px`,
+    '--phone-time-weight': currentModel.timeWeight || 'normal',
+    '--phone-item-padding-y': `${currentModel.itemPaddingY}px`,
+    '--phone-time-padding-top': `${currentModel.timePaddingTop}px`,
+    '--phone-time-padding-bottom': `${currentModel.timePaddingBottom}px`,
+    '--phone-nav-title-size': `${currentModel.navTitleSize}px`,
+    '--phone-nav-title-weight': currentModel.navTitleWeight || '500',
+    '--phone-time-after-revoke-reduce': `${currentModel.timeAfterRevokeReduce || 0}px`,
+    '--phone-time-before-revoke-reduce': `${currentModel.timeBeforeRevokeReduce || 0}px`,
+    '--phone-revoke-after-time-reduce': `${currentModel.revokeAfterTimeReduce || 0}px`,
+    '--phone-time-letter-spacing': `${currentModel.timeLetterSpacing || 0}px`,
+    '--phone-revoke-letter-spacing': `${currentModel.revokeLetterSpacing || 0}px`,
+    '--phone-av-icon-width': `${currentModel.avIconWidth || 50}px`,
+    '--phone-av-icon-height': `${currentModel.avIconHeight || 21}px`,
+    '--phone-av-icon-top': `${currentModel.avIconTop ?? 2}px`,
+    '--phone-nav-earphone-width': `${currentModel.navEarphoneWidth || 36}px`,
+    '--phone-nav-earphone-height': `${currentModel.navEarphoneHeight || 44}px`,
+    '--phone-nav-earphone-margin-top': `${currentModel.navEarphoneMarginTop ?? 8}px`,
   }
+}
+
+onMounted(() => {
+  // 首次升级到多机型时，优先展示新机型“华为俊秀”，便于立即查看效果
+  if (!localStorage.getItem('wechat_tool_model_initialized')) {
+    useSystemStore.appearance.model = 'huawei_junxiu'
+    localStorage.setItem('wechat_tool_model_initialized', '1')
+  }
+  applyModelConfig(useSystemStore.appearance.model)
+})
+
+watch(() => useSystemStore.appearance.model, (newModel) => {
+  applyModelConfig(newModel)
 }, {
   immediate: true,
+})
+
+watch(() => useSystemStore.appearance, (newVal) => {
+  appearance.value = newVal
+}, {
+  immediate: true,
+  deep: true,
 })
 </script>
 
