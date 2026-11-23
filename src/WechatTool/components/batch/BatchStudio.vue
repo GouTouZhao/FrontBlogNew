@@ -410,6 +410,7 @@
         </label>
         <a-button size="small" @click="loadSampleBatchText">加载示例</a-button>
         <a-button size="small" @click="syncTasksToTextarea">从任务同步文本</a-button>
+        <a-button size="small" type="primary" ghost @click="aiPromptModalVisible = true">AI提示词</a-button>
         <a-button size="small" danger @click="clearAllTasks">清空</a-button>
       </div>
 
@@ -595,6 +596,12 @@
         </div>
       </div>
     </div>
+
+    <AiPromptModal
+      v-model:open="aiPromptModalVisible"
+      defaultMode="batch"
+      :defaultModel="batchDefaultModelLabel"
+    />
   </div>
 </template>
 
@@ -620,11 +627,16 @@ import PhoneBar from "../phone/PhoneBar.vue";
 import PhoneNav from "../phone/PhoneNav.vue";
 import PhoneBody from "../phone/PhoneBody.vue";
 import PhoneBottom from "../phone/PhoneBottom.vue";
+import AiPromptModal from "@/WechatTool/components/common/AiPromptModal.vue";
 
 const { useSystemStore, useUserStore, useChatStore } = useStore();
 const { captureHtmlToImage } = useHtmlToImage();
 
 // 状态定义
+const aiPromptModalVisible = ref(false);
+const batchDefaultModelLabel = computed(() =>
+  useSystemStore.appearance?.model === "huawei_junxiu" ? "华为细圆" : "默认机型"
+);
 const activeTabKey = ref("appearance");
 const currentTaskIndex = ref(0);
 const taskList = ref([]);
@@ -1388,6 +1400,7 @@ onMounted(() => {
     .middle-toolbar {
       display: flex;
       align-items: center;
+      flex-wrap: wrap;
       gap: 8px;
       padding: 10px 14px;
       background: rgba(0, 0, 0, 0.02);

@@ -8,6 +8,13 @@ const isAdmin = computed(() => localStorage.getItem('user_email') === '246060780
 const apps = computed(() => {
   const list = [
     {
+      id: 'goutou-assistant',
+      path: '/apps/goutou-assistant',
+      name: 'GouTou助理',
+      description: '全能 AI 智能助理，支持即时问答、任务协作、追问交互与会话管理。',
+      icon: 'M12 2a2 2 0 0 1 2 2v2a8 8 0 0 1 7.938 7H22a1 1 0 0 1 1 1v4a1 1 0 0 1-1 1h-1.07A8.001 8.001 0 0 1 14 22H10a8.001 8.001 0 0 1-6.93-4H2a1 1 0 0 1-1-1v-4a1 1 0 0 1 1-1h1.062A8 8 0 0 1 10 6V4a2 2 0 0 1 2-2zm-3 10a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zm6 0a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3z'
+    },
+    {
       id: 'exam-generator',
       path: '/apps/exam-generator',
       name: '生成试卷助手',

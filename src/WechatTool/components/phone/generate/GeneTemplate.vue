@@ -8,6 +8,9 @@
   <a-tooltip title="导入聊天内容（支持直接粘贴或读取文件）" placement="right">
     <div class="wtc-button" @click="openImportModal">导入聊天</div>
   </a-tooltip>
+  <a-tooltip title="输入主题/描述即时生成可复制给AI的标准化提示词" placement="right">
+    <div class="wtc-button" @click="openAiPromptModal">AI提示词</div>
+  </a-tooltip>
 
   <!-- 导入聊天内容弹窗 -->
   <a-modal
@@ -29,6 +32,7 @@
         </label>
         <a-button size="small" @click="importTextContent = ''">清空内容</a-button>
         <a-button size="small" type="link" @click="handleFillSample">填入示例模板</a-button>
+        <a-button size="small" type="primary" ghost @click="openAiPromptModal">AI提示词</a-button>
       </div>
       <a-textarea
         v-model:value="importTextContent"
@@ -37,23 +41,39 @@
       />
     </div>
   </a-modal>
+
+  <AiPromptModal
+    v-model:open="aiPromptModalVisible"
+    defaultMode="single"
+    :defaultModel="currentModelLabel"
+  />
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import dayjs from "dayjs";
 import FileSaver from 'file-saver';
 import useStore from "@/WechatTool/store";
 import { toast } from "@/WechatTool/utils/feedback";
 import { chatListToText, textToChatList } from "@/WechatTool/utils/chatTextAdapter";
+import AiPromptModal from "@/WechatTool/components/common/AiPromptModal.vue";
 
 const { useChatStore, useUserStore, useSystemStore } = useStore();
 
 const importModalVisible = ref(false);
 const importTextContent = ref("");
+const aiPromptModalVisible = ref(false);
+
+const currentModelLabel = computed(() =>
+  useSystemStore.appearance?.model === "huawei_junxiu" ? "华为细圆" : "默认机型"
+);
 
 const openImportModal = () => {
   importModalVisible.value = true;
+};
+
+const openAiPromptModal = () => {
+  aiPromptModalVisible.value = true;
 };
 
 const handleSaveTemplate = async () => {

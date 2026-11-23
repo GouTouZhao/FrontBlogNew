@@ -42,6 +42,11 @@ const router = createRouter({
       component: () => import('../views/AppsView.vue')
     },
     {
+      path: '/apps/goutou-assistant',
+      name: 'goutou-assistant',
+      component: () => import('../views/GouTouAssistantView.vue')
+    },
+    {
       path: '/apps/exam-generator',
       name: 'exam-generator',
       component: () => import('../views/ExamGeneratorView.vue')

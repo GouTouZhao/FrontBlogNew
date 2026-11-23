@@ -11,22 +11,34 @@
 
     <a-divider>读取文字模板</a-divider>
     <a-textarea v-model:value="importText" :rows="6" placeholder="请在此处粘贴文字模板，例：&#10;机型：华为细圆&#10;手机时间：12:30&#10;手机电量：80%&#10;对方用户名：派大星&#10;&#10;文本：我：你好派大星。&#10;文本：对方：你好GouTou！&#10;语音：对方：5秒&#10;通话：我：通话时长 00:10" />
-    <div style="margin-top: 10px; text-align: right;">
+    <div style="margin-top: 10px; display: flex; justify-content: flex-end; gap: 8px;">
+      <a-button @click="aiPromptModalVisible = true">AI提示词</a-button>
       <a-button type="primary" @click="handleImportText">应用模板</a-button>
     </div>
+
+    <AiPromptModal
+      v-model:open="aiPromptModalVisible"
+      defaultMode="single"
+      :defaultModel="currentModelLabel"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref } from "vue";
+import { ref, computed } from "vue";
 import useStore from "@/WechatTool/store";
 import { toast } from "@/WechatTool/utils/feedback";
 import { chatListToText, textToChatList } from "@/WechatTool/utils/chatTextAdapter";
+import AiPromptModal from "@/WechatTool/components/common/AiPromptModal.vue";
 
 const { useChatStore, useUserStore, useSystemStore } = useStore();
 
 const exportText = ref("");
 const importText = ref("");
+const aiPromptModalVisible = ref(false);
+const currentModelLabel = computed(() =>
+  useSystemStore.appearance?.model === "huawei_junxiu" ? "华为细圆" : "默认机型"
+);
 
 const handleExportText = () => {
   exportText.value = chatListToText(useChatStore.chatList, {
