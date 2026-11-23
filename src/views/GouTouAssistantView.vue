@@ -93,8 +93,9 @@ const initDeviceAndWebSocket = async () => {
     };
 
     const regRes = await api.post('/agent/register_device', regPayload);
-    if (!regRes.data || regRes.data.code !== 0) {
-      throw new Error(regRes.data?.msg || '设备码注册/验证失败');
+    const isRegSuccess = regRes.data && (regRes.data.errCode === 0 || regRes.data.code === 0);
+    if (!isRegSuccess) {
+      throw new Error(regRes.data?.errMsg || regRes.data?.msg || '设备码注册/验证失败');
     }
 
     // 步骤二：建立 WebSocket 连接
@@ -145,7 +146,7 @@ const initDeviceAndWebSocket = async () => {
     };
   } catch (err) {
     isConnecting.value = false;
-    connectionError.value = '设备验证失败: ' + (err.response?.data?.msg || err.message || '网络连接异常');
+    connectionError.value = '设备验证失败: ' + (err.response?.data?.errMsg || err.response?.data?.msg || err.message || '网络连接异常');
   }
 };
 
@@ -201,7 +202,7 @@ const loadConversations = async () => {
       base: getRequestBase(),
       limit: 50
     });
-    if (res.data && res.data.code === 0) {
+    if (res.data && (res.data.errCode === 0 || res.data.code === 0)) {
       const list = res.data.data?.conversations || [];
       // 保证主会话（ID = 0）置顶存在
       const hasMain = list.some(c => c.conversation_id === 0);
@@ -235,7 +236,7 @@ const createNewConversation = async () => {
       base: getRequestBase(),
       title
     });
-    if (res.data && res.data.code === 0) {
+    if (res.data && (res.data.errCode === 0 || res.data.code === 0)) {
       showToast('创建会话成功', 'success');
       showNewConvModal.value = false;
       newConvTitle.value = '';
@@ -245,7 +246,7 @@ const createNewConversation = async () => {
         await switchConversation(newConv.conversation_id);
       }
     } else {
-      showToast(res.data?.msg || '创建会话失败', 'error');
+      showToast(res.data?.errMsg || res.data?.msg || '创建会话失败', 'error');
     }
   } catch (e) {
     showToast('创建会话异常: ' + e.message, 'error');
@@ -262,7 +263,7 @@ const loadHistoryMessages = async (convId) => {
       limit: 50,
       order_asc: false
     });
-    if (res.data && res.data.code === 0) {
+    if (res.data && (res.data.errCode === 0 || res.data.code === 0)) {
       const rawList = res.data.data?.messages || [];
       messages.value = rawList.map(m => {
         let meta = null;
@@ -306,15 +307,15 @@ const sendMessage = async () => {
       message: text,
       conversation_id: currentConvId.value
     });
-    if (res.data && res.data.code === 0) {
+    if (res.data && (res.data.errCode === 0 || res.data.code === 0)) {
       if (res.data.data?.sequence) {
         tempUserMsg.sequence = res.data.data.sequence;
       }
     } else {
-      showToast(res.data?.msg || '发送失败', 'error');
+      showToast(res.data?.errMsg || res.data?.msg || '发送失败', 'error');
     }
   } catch (e) {
-    showToast('发送消息异常: ' + (e.response?.data?.msg || e.message), 'error');
+    showToast('发送消息异常: ' + (e.response?.data?.errMsg || e.response?.data?.msg || e.message), 'error');
   } finally {
     isSending.value = false;
   }
@@ -340,7 +341,7 @@ const submitAskUserAnswer = async (msg) => {
       task_id: taskId,
       answer
     });
-    if (res.data && res.data.code === 0) {
+    if (res.data && (res.data.errCode === 0 || res.data.code === 0)) {
       showToast('回复已提交给 Agent', 'success');
       // 记录在界面上已回答
       if (!msg.metadata) msg.metadata = {};
@@ -357,7 +358,7 @@ const submitAskUserAnswer = async (msg) => {
       });
       scrollToBottom();
     } else {
-      showToast(res.data?.msg || '回复失败', 'error');
+      showToast(res.data?.errMsg || res.data?.msg || '回复失败', 'error');
     }
   } catch (e) {
     showToast('提交回复异常: ' + e.message, 'error');
