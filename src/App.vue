@@ -196,7 +196,7 @@ const handleAuthAction = () => {
     <ConfirmModal />
     <LoginModal :isVisible="showLoginModal" @close="showLoginModal = false" @loginSuccess="checkAuth" />
     
-    <aside class="sidebar" :class="{ 'expanded': isSidebarExpanded, 'collapsed': !isSidebarExpanded }">
+    <aside v-if="!route.meta?.hideSidebar" class="sidebar" :class="{ 'expanded': isSidebarExpanded, 'collapsed': !isSidebarExpanded }">
       <div class="sidebar-top">
         <button class="nav-toggle" @click="toggleSidebar">
           {{ isSidebarExpanded ? '收起' : '菜单' }}
@@ -288,13 +288,19 @@ const handleAuthAction = () => {
       </div>
     </aside>
 
-    <main class="main-content">
+    <main class="main-content" :class="{ 'full-width': route.meta?.hideSidebar }">
       <router-view></router-view>
     </main>
   </div>
 </template>
 
 <style scoped>
+.main-content.full-width {
+  margin-left: 0 !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+}
+
 .sidebar {
   padding: 20px 0;
   justify-content: space-between;

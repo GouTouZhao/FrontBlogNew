@@ -104,6 +104,8 @@ const initDeviceAndWebSocket = async () => {
       apiBase = window.location.origin + apiBase;
     }
     const wsBase = apiBase.replace(/^http/, 'ws');
+    // 动态拉取最新的 access_token，防止静默刷新后仍使用旧 token 导致连接被拒绝
+    token.value = localStorage.getItem('access_token') || '';
     const wsUrl = `${wsBase}/agent/ws?device_id=${encodeURIComponent(deviceId.value)}&token=${encodeURIComponent(token.value)}`;
 
     if (socket) {

@@ -22,6 +22,20 @@ const router = createRouter({
       component: ProfileView
     },
     {
+      path: '/privacy-policy',
+      name: 'privacy-policy',
+      alias: ['/privacy'],
+      meta: { hideSidebar: true },
+      component: () => import('../views/PrivacyPolicyView.vue')
+    },
+    {
+      path: '/privacy-rights',
+      name: 'privacy-rights',
+      alias: ['/rights'],
+      meta: { hideSidebar: true },
+      component: () => import('../views/PrivacyPolicyView.vue')
+    },
+    {
       path: '/:partition',
       name: 'partition',
       component: PartitionView
