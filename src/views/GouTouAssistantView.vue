@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue';
 import { useRouter } from 'vue-router';
-import api from '../api';
+import api, { refreshAccessToken } from '../api';
 import { showToast } from '../utils/toast';
 
 const router = useRouter();
@@ -71,7 +71,7 @@ const scrollToBottom = () => {
 };
 
 // 1. 初始化进入：设备码上传验证与 WebSocket 长连接建立
-const initDeviceAndWebSocket = async () => {
+const initDeviceAndWebSocket = async (isRetry = false) => {
   if (!isLoggedIn.value) {
     isConnecting.value = false;
     connectionError.value = '请先登录 GouTou 账号后再进入助理。';
@@ -133,10 +133,21 @@ const initDeviceAndWebSocket = async () => {
       }
     };
 
-    socket.onerror = (err) => {
+    socket.onerror = async (err) => {
       if (!isConnected.value) {
+        // 如果握手失败且尚未重试过，尝试通过 7 天 RefreshToken 刷新凭据并重试
+        if (!isRetry && localStorage.getItem('refresh_token')) {
+          try {
+            console.log('[WebSocket] 握手失败，尝试通过 RefreshToken 静默刷新凭据并重连...');
+            await refreshAccessToken();
+            await initDeviceAndWebSocket(true);
+            return;
+          } catch (rfErr) {
+            console.error('[WebSocket] RefreshToken 刷新失败:', rfErr);
+          }
+        }
         isConnecting.value = false;
-        connectionError.value = 'WebSocket 握手或长连接失败，未能进入 GouTou 助理，请检查网络后重试。';
+        connectionError.value = 'WebSocket 握手或长连接失败，未能进入 GouTou 助理，请检查网络或重新登录。';
       }
     };
 

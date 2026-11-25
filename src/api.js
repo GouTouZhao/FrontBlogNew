@@ -39,6 +39,60 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
+/**
+ * 供全站调用的无感/主动 Token 刷新方法，使用 7 天 RefreshToken 换取新的双 Token
+ */
+export const refreshAccessToken = async () => {
+  const oldRefreshToken = localStorage.getItem('refresh_token') || '';
+  if (!oldRefreshToken) {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user_email');
+    localStorage.removeItem('user_nickname');
+    localStorage.removeItem('user_id');
+    window.dispatchEvent(new Event('auth-expired'));
+    throw new Error('未找到有效的 RefreshToken，请重新登录');
+  }
+
+  try {
+    const refreshResponse = await axios.post(`${BASE_URL}/user/refresh_token`, {
+      refresh_token: oldRefreshToken
+    }, {
+      headers: {
+        'X-Refresh-Token': oldRefreshToken
+      },
+      withCredentials: true
+    });
+
+    let data = refreshResponse.data;
+    if (data.errCode === 0 && data.data) {
+      data = data.data;
+    }
+
+    const newAccessToken = data.accessToken || data.access_token;
+    const newRefreshToken = data.refreshToken || data.refresh_token;
+
+    if (newAccessToken) {
+      localStorage.setItem('access_token', newAccessToken);
+      if (newRefreshToken) {
+        localStorage.setItem('refresh_token', newRefreshToken);
+      }
+      api.defaults.headers.common['Authorization'] = 'Bearer ' + newAccessToken;
+      return newAccessToken;
+    } else {
+      throw new Error('服务器未返回有效 Token');
+    }
+  } catch (err) {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user_email');
+    localStorage.removeItem('user_nickname');
+    localStorage.removeItem('user_id');
+    window.dispatchEvent(new Event('auth-expired'));
+    throw err;
+  }
+};
+
 // Request interceptor to add token
 api.interceptors.request.use(
   (config) => {
@@ -57,21 +111,18 @@ api.interceptors.response.use(
   (response) => {
     // Intercept backend custom token errors (e.g. 1001) that return 200 OK
     if (response.data && response.data.errCode === 1001 && response.data.errMsg && response.data.errMsg.includes('access_token')) {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('user_email');
-      localStorage.removeItem('user_nickname');
-      localStorage.removeItem('user_id');
-      window.dispatchEvent(new Event('auth-expired'));
-      return Promise.reject(new Error(response.data.errMsg));
+      const customErr = new Error(response.data.errMsg);
+      customErr.response = { status: 401, data: response.data };
+      customErr.config = response.config;
+      return Promise.reject(customErr);
     }
     return response;
   },
   async (error) => {
     const originalRequest = error.config;
 
-    // Check if error is 401 and we haven't retried yet
-    if (error.response && error.response.status === 401 && !originalRequest._retry) {
+    // Check if error is 401 and we haven't retried yet, and not the refresh endpoint itself
+    if (error.response && error.response.status === 401 && !originalRequest._retry && (!originalRequest.url || !originalRequest.url.includes('/user/refresh_token'))) {
       if (isRefreshing) {
         return new Promise(function (resolve, reject) {
           failedQueue.push({ resolve, reject });
@@ -87,37 +138,12 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        // Assume backend refresh token endpoint is /user/refresh_token
-        // We use a fresh axios instance to avoid interceptor loops
-        const refreshResponse = await axios.post(`${BASE_URL}/user/refresh_token`, {}, {
-          withCredentials: true
-        });
-
-        let data = refreshResponse.data;
-        if (data.errCode === 0 && data.data) {
-          data = data.data;
-        }
-
-        if (data.accessToken) {
-          localStorage.setItem('access_token', data.accessToken);
-          api.defaults.headers.common['Authorization'] = 'Bearer ' + data.accessToken;
-          processQueue(null, data.accessToken);
-
-          originalRequest.headers['Authorization'] = 'Bearer ' + data.accessToken;
-          return api(originalRequest);
-        } else {
-          throw new Error('No token returned');
-        }
+        const newAccessToken = await refreshAccessToken();
+        processQueue(null, newAccessToken);
+        originalRequest.headers['Authorization'] = 'Bearer ' + newAccessToken;
+        return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        // Clean up and notify
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refresh_token');
-        localStorage.removeItem('user_email');
-        localStorage.removeItem('user_nickname');
-        localStorage.removeItem('user_id');
-
-        window.dispatchEvent(new Event('auth-expired'));
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
