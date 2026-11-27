@@ -389,6 +389,46 @@ const isAskUserMessage = (msg) => {
   return false;
 };
 
+// 完成状态中的任务加载记录
+const completingCron = ref({});
+
+// 判断是否为 cron 定时提醒消息类型
+const isCronReminderMessage = (msg) => {
+  if (!msg) return false;
+  const meta = msg.metadata;
+  if (!meta) return false;
+  return meta.mode === 'cron' || meta.type === 'cron_reminder' || !!meta.cron_id;
+};
+
+// 提交标记定时提醒任务已完成
+const submitCompleteCron = async (msg) => {
+  const cronId = msg.metadata?.cron_id;
+  if (!cronId) {
+    showToast('未找到对应的提醒任务 ID', 'error');
+    return;
+  }
+
+  completingCron.value[cronId] = true;
+  try {
+    const res = await api.post('/agent/complete_cron', {
+      base: getRequestBase(),
+      cron_id: cronId,
+      message_id: msg.message_id
+    });
+    if (res.data && (res.data.errCode === 0 || res.data.code === 0)) {
+      showToast('任务已标记完成，后续不再提醒', 'success');
+      if (!msg.metadata) msg.metadata = {};
+      msg.metadata.completed = true;
+    } else {
+      showToast(res.data?.errMsg || res.data?.msg || '操作失败', 'error');
+    }
+  } catch (e) {
+    showToast('标记完成异常: ' + e.message, 'error');
+  } finally {
+    completingCron.value[cronId] = false;
+  }
+};
+
 onMounted(() => {
   initDeviceAndWebSocket();
 });
@@ -513,6 +553,31 @@ onUnmounted(() => {
                     :disabled="submittingAskUser[msg.message_id]"
                   >
                     {{ submittingAskUser[msg.message_id] ? '提交中...' : '提交回复' }}
+                  </button>
+                </div>
+              </div>
+
+              <!-- 特殊展示：cron 定时提醒专属卡片 -->
+              <div v-else-if="isCronReminderMessage(msg)" class="cron-reminder-card">
+                <div class="cron-header">
+                  <span class="cron-badge">⏰ 计划提醒</span>
+                  <span v-if="msg.metadata?.target_at" class="cron-target-time">目标时间: {{ msg.metadata.target_at }}</span>
+                </div>
+                <div class="cron-content">{{ msg.content }}</div>
+                
+                <div class="cron-actions">
+                  <!-- 已完成状态展示 -->
+                  <div v-if="msg.metadata?.completed" class="cron-completed-badge">
+                    <span>✓ 已完成 (已终止后续提醒)</span>
+                  </div>
+                  <!-- 未完成：已完成按钮 -->
+                  <button
+                    v-else
+                    class="cron-complete-btn"
+                    @click="submitCompleteCron(msg)"
+                    :disabled="completingCron[msg.metadata?.cron_id]"
+                  >
+                    {{ completingCron[msg.metadata?.cron_id] ? '正在处理...' : '✓ 已完成 (不再提醒)' }}
                   </button>
                 </div>
               </div>
@@ -918,6 +983,80 @@ onUnmounted(() => {
   color: #52c41a;
   font-size: 13px;
   margin-top: 6px;
+}
+
+/* cron 定时提醒专属卡片式展示 */
+.cron-reminder-card {
+  max-width: 80%;
+  background: rgba(82, 196, 26, 0.05);
+  border: 1px solid rgba(82, 196, 26, 0.4);
+  border-radius: 12px;
+  padding: 16px;
+  color: var(--text-color);
+}
+
+.cron-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.cron-badge {
+  background: #52c41a;
+  color: #fff;
+  font-size: 11px;
+  font-weight: bold;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.cron-target-time {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.cron-content {
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  margin-bottom: 12px;
+}
+
+.cron-actions {
+  display: flex;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.cron-complete-btn {
+  background: var(--text-color, #222);
+  color: var(--bg-color, #fff);
+  border: none;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  transition: opacity 0.2s;
+}
+
+.cron-complete-btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.cron-complete-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cron-completed-badge {
+  color: #52c41a;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* 底部通用输入条 */
