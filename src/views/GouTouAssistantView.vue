@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted, nextTick, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import api, { refreshAccessToken } from '../api';
 import { showToast } from '../utils/toast';
+import goutouAvatar from '@/assets/GouTou.jpg';
 
 const router = useRouter();
 
@@ -11,6 +12,73 @@ const token = ref(localStorage.getItem('access_token') || '');
 const userId = ref(localStorage.getItem('user_id') || '');
 const nickname = ref(localStorage.getItem('user_nickname') || '我');
 const isLoggedIn = computed(() => !!token.value && !!userId.value);
+
+// 分页与历史加载状态
+const hasMoreMessages = ref(false);
+const isLoadingMoreMessages = ref(false);
+
+const CHAT_WEEK_DAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
+
+const getMessageTimeMillis = (msg) => {
+  if (!msg) return 0;
+  let t = msg.created_at || msg.timestamp || msg.time || 0;
+  if (!t && typeof msg.message_id === 'number' && msg.message_id > 1600000000000) {
+    return msg.message_id;
+  }
+  if (t > 0 && t < 10000000000) {
+    t *= 1000;
+  }
+  return Number(t) || 0;
+};
+
+const formatChatTimestamp = (timeMillis) => {
+  if (!timeMillis || timeMillis <= 0) return '';
+  const msgDate = new Date(timeMillis);
+  const nowDate = new Date();
+
+  const msgYear = msgDate.getFullYear();
+  const nowYear = nowDate.getFullYear();
+
+  const pad = (n) => (n < 10 ? '0' + n : n);
+  const timeStr = `${pad(msgDate.getHours())}:${pad(msgDate.getMinutes())}`;
+
+  const isSameDay = (d1, d2) =>
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate();
+
+  // 1. 今天：直接写时钟时间，什么都不用带
+  if (isSameDay(msgDate, nowDate)) {
+    return timeStr;
+  }
+
+  // 2. 昨天：直接写 "昨天 HH:mm"
+  const yesterday = new Date(nowDate.getTime() - 24 * 60 * 60 * 1000);
+  if (isSameDay(msgDate, yesterday)) {
+    return `昨天 ${timeStr}`;
+  }
+
+  const weekStr = CHAT_WEEK_DAYS[msgDate.getDay()] || '';
+  const month = msgDate.getMonth() + 1;
+  const date = msgDate.getDate();
+
+  // 3. 本年其他日期：月日 星期几 HH:mm
+  if (msgYear === nowYear) {
+    return `${month}月${date}日 ${weekStr} ${timeStr}`;
+  }
+
+  // 4. 不是本年：几几年月日 星期几 HH:mm
+  return `${msgYear}年${month}月${date}日 ${weekStr} ${timeStr}`;
+};
+
+const shouldShowTimeDivider = (currMsg, prevMsg) => {
+  const currTime = getMessageTimeMillis(currMsg);
+  if (!currTime) return false;
+  if (!prevMsg) return true;
+  const prevTime = getMessageTimeMillis(prevMsg);
+  if (!prevTime) return true;
+  return Math.abs(currTime - prevTime) >= 5 * 60 * 1000;
+};
 
 // 设备码逻辑：浏览器内持久保存
 const getOrCreateDeviceId = () => {
@@ -273,11 +341,12 @@ const loadHistoryMessages = async (convId) => {
       base: getRequestBase(),
       conversation_id: convId,
       from_sequence: 0,
-      limit: 50,
+      limit: 20,
       order_asc: false
     });
     if (res.data && (res.data.errCode === 0 || res.data.code === 0)) {
       const rawList = res.data.data?.messages || [];
+      hasMoreMessages.value = res.data.data?.has_more || false;
       messages.value = rawList.map(m => {
         let meta = null;
         if (typeof m.metadata === 'string' && m.metadata) {
@@ -294,6 +363,59 @@ const loadHistoryMessages = async (convId) => {
     }
   } catch (e) {
     console.error('Failed to load history messages:', e);
+  }
+};
+
+// 向上滑动到顶部加载更早的历史消息
+const loadMoreHistoryMessages = async () => {
+  if (isLoadingMoreMessages.value || !hasMoreMessages.value || messages.value.length === 0) return;
+  const oldestMsg = messages.value[0];
+  const fromSeq = oldestMsg?.sequence || 0;
+  if (fromSeq <= 0) return;
+
+  isLoadingMoreMessages.value = true;
+  const container = messagesContainer.value;
+  const prevScrollHeight = container ? container.scrollHeight : 0;
+
+  try {
+    const res = await api.post('/agent/get_history_messages', {
+      base: getRequestBase(),
+      conversation_id: currentConvId.value,
+      from_sequence: fromSeq,
+      limit: 20,
+      order_asc: false
+    });
+    if (res.data && (res.data.errCode === 0 || res.data.code === 0)) {
+      const rawList = res.data.data?.messages || [];
+      hasMoreMessages.value = res.data.data?.has_more || false;
+      const formatted = rawList.map(m => {
+        let meta = null;
+        if (typeof m.metadata === 'string' && m.metadata) {
+          try { meta = JSON.parse(m.metadata); } catch (e) {}
+        } else if (typeof m.metadata === 'object') {
+          meta = m.metadata;
+        }
+        return {
+          ...m,
+          metadata: meta
+        };
+      });
+      messages.value = [...formatted, ...messages.value];
+      await nextTick();
+      if (container) {
+        container.scrollTop = container.scrollHeight - prevScrollHeight;
+      }
+    }
+  } catch (e) {
+    console.error('Failed to load more history messages:', e);
+  } finally {
+    isLoadingMoreMessages.value = false;
+  }
+};
+
+const handleScroll = (e) => {
+  if (e.target && e.target.scrollTop <= 20 && hasMoreMessages.value && !isLoadingMoreMessages.value) {
+    loadMoreHistoryMessages();
   }
 };
 
@@ -389,8 +511,45 @@ const isAskUserMessage = (msg) => {
   return false;
 };
 
-// 完成状态中的任务加载记录
+// 完成状态中的任务加载记录与长按状态
 const completingCron = ref({});
+const cronPressProgress = ref({});
+let cronPressTimer = null;
+let activePressCronId = null;
+
+const startCronPress = (msg) => {
+  const cronId = msg.metadata?.cron_id;
+  if (!cronId || completingCron.value[cronId]) return;
+
+  cancelCronPress();
+
+  activePressCronId = cronId;
+  const startTime = Date.now();
+  const DURATION = 2000;
+  cronPressProgress.value[cronId] = 0;
+
+  cronPressTimer = setInterval(() => {
+    const elapsed = Date.now() - startTime;
+    const progress = Math.min(100, Math.floor((elapsed / DURATION) * 100));
+    cronPressProgress.value[cronId] = progress;
+
+    if (elapsed >= DURATION) {
+      cancelCronPress();
+      submitCompleteCron(msg);
+    }
+  }, 25);
+};
+
+const cancelCronPress = () => {
+  if (cronPressTimer) {
+    clearInterval(cronPressTimer);
+    cronPressTimer = null;
+  }
+  if (activePressCronId) {
+    cronPressProgress.value[activePressCronId] = 0;
+    activePressCronId = null;
+  }
+};
 
 // 判断是否为 cron 定时提醒消息类型
 const isCronReminderMessage = (msg) => {
@@ -485,6 +644,8 @@ onUnmounted(() => {
             :class="{ active: currentConvId === c.conversation_id }"
             @click="switchConversation(c.conversation_id)"
           >
+            <img v-if="c.conversation_id === 0" :src="goutouAvatar" class="conv-item-avatar" alt="GouTou" />
+            <span v-else class="conv-item-avatar robot">💬</span>
             <span class="conv-tag" v-if="c.conversation_id === 0">主会话</span>
             <span class="conv-tag sub" v-else>子会话</span>
             <span class="conv-title">{{ c.title || '会话 ' + c.conversation_id }}</span>
@@ -497,6 +658,8 @@ onUnmounted(() => {
         <!-- 窗格顶部栏 -->
         <header class="pane-header">
           <div class="pane-title">
+            <img v-if="currentConvId === 0" :src="goutouAvatar" class="pane-avatar" alt="GouTou" />
+            <span v-else class="pane-avatar robot">🤖</span>
             <strong>GouTou 助理</strong>
             <span class="conv-badge" v-if="currentConvId === 0">主会话 (默认)</span>
             <span class="conv-badge sub" v-else>子会话 #{{ currentConvId }}</span>
@@ -507,24 +670,50 @@ onUnmounted(() => {
         </header>
 
         <!-- 消息历史流 -->
-        <div class="messages-stream" ref="messagesContainer">
+        <div class="messages-stream" ref="messagesContainer" @scroll="handleScroll">
+          <!-- 顶部加载更早历史提示 -->
+          <div v-if="hasMoreMessages" class="load-more-hint" @click="loadMoreHistoryMessages">
+            <span>{{ isLoadingMoreMessages ? '正在同步更早的消息...' : '↑ 向上划或点击加载更早历史记录' }}</span>
+          </div>
+          <div v-else-if="messages.length > 5" class="loaded-all-hint">
+            <span>—— 已加载全部历史记录 ——</span>
+          </div>
+
           <div v-if="messages.length === 0" class="empty-hint">
             <p>暂无消息，向 GouTou 助理发送一句话开始对话吧！</p>
           </div>
 
-          <div
-            v-for="msg in messages"
+          <template
+            v-for="(msg, index) in messages"
             :key="msg.message_id || msg.sequence"
-            class="msg-row"
-            :class="msg.role === 'user' ? 'msg-user' : 'msg-assistant'"
           >
+            <!-- 5 分钟时间戳分割线 -->
+            <div
+              v-if="shouldShowTimeDivider(msg, messages[index - 1])"
+              class="chat-time-divider"
+            >
+              <span>{{ formatChatTimestamp(getMessageTimeMillis(msg)) }}</span>
+            </div>
+
+            <div
+              class="msg-row"
+              :class="msg.role === 'user' ? 'msg-user' : 'msg-assistant'"
+            >
             <!-- 普通用户气泡 -->
             <div v-if="msg.role === 'user'" class="bubble user-bubble">
               <div class="bubble-content">{{ msg.content }}</div>
             </div>
 
             <!-- Agent 消息 -->
-            <div v-else class="bubble-container">
+            <div v-else class="assistant-msg-wrap">
+              <img
+                v-if="currentConvId === 0"
+                :src="goutouAvatar"
+                class="bot-msg-avatar"
+                alt="GouTou"
+              />
+              <span v-else class="bot-msg-avatar robot">🤖</span>
+              <div class="bubble-container">
               <!-- 特殊展示：ask_user 专属卡片 -->
               <div v-if="isAskUserMessage(msg)" class="ask-user-card">
                 <div class="ask-header">
@@ -570,14 +759,31 @@ onUnmounted(() => {
                   <div v-if="msg.metadata?.completed" class="cron-completed-badge">
                     <span>✓ 已完成 (已终止后续提醒)</span>
                   </div>
-                  <!-- 未完成：已完成按钮 -->
+                  <!-- 未完成：按住两秒确认按钮 -->
                   <button
                     v-else
                     class="cron-complete-btn"
-                    @click="submitCompleteCron(msg)"
+                    :class="{ pressing: (cronPressProgress[msg.metadata?.cron_id] || 0) > 0 }"
                     :disabled="completingCron[msg.metadata?.cron_id]"
+                    @mousedown="startCronPress(msg)"
+                    @mouseup="cancelCronPress"
+                    @mouseleave="cancelCronPress"
+                    @touchstart.passive="startCronPress(msg)"
+                    @touchend="cancelCronPress"
+                    @touchcancel="cancelCronPress"
+                    @contextmenu.prevent
                   >
-                    {{ completingCron[msg.metadata?.cron_id] ? '正在处理...' : '✓ 已完成 (不再提醒)' }}
+                    <div
+                      class="cron-btn-progress-bar"
+                      :style="{ width: (cronPressProgress[msg.metadata?.cron_id] || 0) + '%' }"
+                    ></div>
+                    <span class="cron-btn-text">
+                      <template v-if="completingCron[msg.metadata?.cron_id]">正在处理...</template>
+                      <template v-else-if="(cronPressProgress[msg.metadata?.cron_id] || 0) > 0">
+                        松开取消 ({{ (((100 - (cronPressProgress[msg.metadata?.cron_id] || 0)) * 20) / 1000).toFixed(1) }}s)
+                      </template>
+                      <template v-else>按住 2 秒确认完成</template>
+                    </span>
                   </button>
                 </div>
               </div>
@@ -588,6 +794,8 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
+          </div>
+          </template>
         </div>
 
         <!-- 底部消息输入区域 -->
@@ -1030,6 +1238,8 @@ onUnmounted(() => {
 }
 
 .cron-complete-btn {
+  position: relative;
+  overflow: hidden;
   background: var(--text-color, #222);
   color: var(--bg-color, #fff);
   border: none;
@@ -1038,7 +1248,34 @@ onUnmounted(() => {
   cursor: pointer;
   font-weight: 600;
   font-size: 13px;
-  transition: opacity 0.2s;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.cron-complete-btn.pressing {
+  transform: scale(0.98);
+}
+
+.cron-btn-progress-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: #52c41a;
+  opacity: 0.6;
+  pointer-events: none;
+  transition: width 0.03s linear;
+}
+
+.cron-btn-text {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
 }
 
 .cron-complete-btn:hover:not(:disabled) {
@@ -1135,5 +1372,98 @@ onUnmounted(() => {
     border-right: none;
     border-bottom: 1px solid var(--border-color);
   }
+}
+
+.load-more-hint {
+  text-align: center;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--secondary-text-color, #888);
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  background: rgba(128, 128, 128, 0.05);
+  transition: background 0.2s;
+}
+
+.load-more-hint:hover {
+  background: rgba(128, 128, 128, 0.12);
+}
+
+.loaded-all-hint {
+  text-align: center;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: rgba(128, 128, 128, 0.45);
+  user-select: none;
+  margin-bottom: 12px;
+}
+
+.assistant-msg-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 80%;
+}
+
+.bot-msg-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1px solid var(--border-color, #e0e0e0);
+}
+
+.bot-msg-avatar.robot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(128, 128, 128, 0.1);
+  font-size: 16px;
+}
+
+.conv-item-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  margin-right: 6px;
+}
+
+.conv-item-avatar.robot {
+  font-size: 14px;
+  margin-right: 6px;
+}
+
+.pane-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-right: 8px;
+}
+
+.pane-avatar.robot {
+  font-size: 18px;
+  margin-right: 8px;
+}
+
+.chat-time-divider {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 14px 0 8px;
+  user-select: none;
+}
+
+.chat-time-divider span {
+  font-size: 11px;
+  color: var(--secondary-text-color, #888);
+  background: rgba(128, 128, 128, 0.1);
+  padding: 2px 10px;
+  border-radius: 10px;
 }
 </style>
